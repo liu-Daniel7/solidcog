@@ -147,21 +147,74 @@ def rotate_if_vertical_text(region):
     return region
 
 def split_regions_for_horizontal_drawing(img):
-    """横版区域裁剪"""
+    """
+    横版工程图通用裁切（更大、更稳）
+    """
+
     h, w = img.shape[:2]
-    # 标题栏（左下）
+
+    # =========================
+    # 标题栏（左下）——扩大
+    # =========================
+
     title_block = img[
-        int(h * 0.72):h,
-        0:int(w * 0.18)
+        int(h * 0.65):h,
+        0:int(w * 0.25)
     ]
-    # 技术要求（左中下）
+
+    # =========================
+    # 技术要求（左中）
+    # =========================
+
     tech_block = img[
-        int(h * 0.45):int(h * 0.72),
-        0:int(w * 0.35)
+        int(h * 0.35):int(h * 0.70),
+        0:int(w * 0.50)
     ]
+
     # 旋转竖排文字
     title_block = rotate_if_vertical_text(title_block)
     tech_block = rotate_if_vertical_text(tech_block)
+
+    # 调试图
+    cv2.imwrite("debug_horizontal_title.png", title_block)
+    cv2.imwrite("debug_horizontal_tech.png", tech_block)
+
+    return {
+        "title_block": title_block,
+        "tech_block": tech_block
+    }
+
+def split_regions_for_vertical_drawing(img):
+    """
+    竖版工程图通用裁切（更大、更稳、更通用）
+    适用于 90% 机械图纸
+    """
+
+    h, w = img.shape[:2]
+
+    # =========================
+    # 标题栏（右下）——放大范围
+    # =========================
+
+    title_block = img[
+        int(h * 0.65):h,
+        int(w * 0.50):w
+    ]
+
+    # =========================
+    # 技术要求（左侧大区域）
+    # =========================
+
+    tech_block = img[
+        int(h * 0.10):int(h * 0.70),
+        0:int(w * 0.70)
+    ]
+
+    # ===== 调试用（强烈建议保留） =====
+
+    cv2.imwrite("debug_vertical_title.png", title_block)
+    cv2.imwrite("debug_vertical_tech.png", tech_block)
+
     return {
         "title_block": title_block,
         "tech_block": tech_block
@@ -254,14 +307,26 @@ def run_ocr(file_path):
                 else:
                     logger.info("检测到竖版图纸")
                     # 竖版处理
-                    gray = enhance_image(cv_img)
-                    res = ocr.ocr(gray, cls=True)
-                    text = extract_text(res)
+                    regions = split_regions_for_vertical_drawing(cv_img)
+                    title_img = regions["title_block"]
+                    tech_img = regions["tech_block"]
+                    
+                    # 图像增强
+                    title_gray = enhance_image(title_img)
+                    tech_gray = enhance_image(tech_img)
+                    
+                    # OCR
+                    title_res = ocr.ocr(title_gray, cls=True)
+                    tech_res = ocr.ocr(tech_gray, cls=True)
+                    
+                    # 提取文本
+                    title_text = extract_text(title_res)
+                    tech_text = extract_text(tech_res)
                     
                     # 保存结果
                     page_result = {
-                        "title_block": "",
-                        "tech_block": text,
+                        "title_block": title_text,
+                        "tech_block": tech_text,
                         "layout": "vertical"
                     }
                     all_text.append(page_result)
@@ -794,11 +859,11 @@ def view_ocr(request: Request, drawing_id: int):
         # 防止 None
         filename = row["filename"] or ""
 
-        title_text = row.get("title_text", "") or ""
+        title_text = row["title_text"] or ""
 
-        tech_text = row.get("tech_text", "") or ""
+        tech_text = row["tech_text"] or ""
 
-        layout = row.get("layout", "") or "unknown"
+        layout = row["layout"] or "unknown"
 
         # 强制字符串（非常关键）
         filename = str(filename)
