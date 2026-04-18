@@ -12,6 +12,10 @@ import sqlite3
 import shutil
 from pdf2image import convert_from_path
 
+# 导入图像处理库
+import cv2
+import numpy as np
+
 # PaddleOCR 将在函数内部导入
 
 # 配置日志
@@ -65,6 +69,15 @@ def get_db_connection():
 # OCR 识别函数
 # ==============================
 
+def detect_layout(img):
+    """判断图纸是横版还是竖版"""
+    h, w = img.shape[:2]
+    if w > h:
+        return "horizontal"
+    else:
+        return "vertical"
+
+
 def run_ocr(file_path):
     """
     对 PDF 文件或 PNG 图片执行 OCR
@@ -103,6 +116,7 @@ def run_ocr(file_path):
             return "不支持的文件类型"
 
         text_result = []
+        layout = "unknown"
 
         for i, img in enumerate(images, 1):
             try:
@@ -111,6 +125,12 @@ def run_ocr(file_path):
                 img_path = f"temp_page_{i}.png"
                 img.save(img_path)
                 logger.info(f"保存图片到: {img_path}")
+                
+                # 检测图纸布局
+                cv_img = cv2.imread(img_path)
+                if cv_img is not None:
+                    layout = detect_layout(cv_img)
+                    logger.info(f"图纸布局: {layout}")
                 
                 # 尝试使用文件路径而不是PIL Image对象
                 result = ocr.ocr(img_path, cls=True)
@@ -143,17 +163,17 @@ def run_ocr(file_path):
 
         if final_text:
             logger.info(f"OCR 完成，识别到 {len(text_result)} 行文本")
-            return final_text
+            return {"text": final_text, "layout": layout}
         else:
             logger.warning("OCR 识别结果为空")
-            return "OCR识别结果为空"
+            return {"text": "OCR识别结果为空", "layout": layout}
 
     except Exception as e:
         logger.error(f"OCR 失败: {e}")
         import traceback
         traceback.print_exc()
         # 返回错误信息，而不是空字符串，这样可以在前端看到错误
-        return f"OCR识别失败: {str(e)}"
+        return {"text": f"OCR识别失败: {str(e)}", "layout": "unknown"}
 
 # ==============================
 # 初始化数据库
@@ -172,7 +192,8 @@ def init_database():
             file_type TEXT,
             file_size INTEGER,
             upload_time TEXT,
-            ocr_text TEXT
+            ocr_text TEXT,
+            layout TEXT
         )
         """)
 
@@ -246,8 +267,10 @@ def upload_drawing(files: list[UploadFile] = File(...)):
             # 执行 OCR
             # ==============================
 
-            ocr_text = run_ocr(file_path)
-            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}")
+            ocr_result = run_ocr(file_path)
+            ocr_text = ocr_result["text"]
+            layout = ocr_result["layout"]
+            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}, 布局: {layout}")
 
             # 写入数据库
             try:
@@ -256,15 +279,16 @@ def upload_drawing(files: list[UploadFile] = File(...)):
                 cursor.execute(
                     """
                     INSERT INTO drawings
-                    (filename, file_type, file_size, upload_time, ocr_text)
-                    VALUES (?, ?, ?, ?, ?)
+                    (filename, file_type, file_size, upload_time, ocr_text, layout)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_filename,
                         ext,
                         file_size,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        ocr_text
+                        ocr_text,
+                        layout
                     )
                 )
                 conn.commit()
@@ -573,7 +597,7 @@ def view_ocr(request: Request, drawing_id: int):
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT filename, ocr_text FROM drawings WHERE id=?",
+        "SELECT filename, ocr_text, layout FROM drawings WHERE id=?",
         (drawing_id,)
     )
 
@@ -589,7 +613,8 @@ def view_ocr(request: Request, drawing_id: int):
         {
             "request": request,
             "filename": row["filename"],
-            "ocr_text": row["ocr_text"]
+            "ocr_text": row["ocr_text"],
+            "layout": row["layout"]
         }
     )
 
