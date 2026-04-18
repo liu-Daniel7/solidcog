@@ -2,108 +2,71 @@
 <html>
 <head>
 
-<title>OCR内容</title>
+<title>OCR查看</title>
+
 <style>
-    * {
-        margin: 0;
-        padding: 0;
-        box-sizing: border-box;
-    }
-    
-    body {
-        font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-        line-height: 1.6;
-        color: #333;
-        background-color: #f5f5f5;
-        padding: 20px;
-    }
-    
-    .container {
-        max-width: 1000px;
-        margin: 0 auto;
-        background-color: #fff;
-        border-radius: 8px;
-        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-        padding: 30px;
-    }
-    
-    h2 {
-        color: #2c3e50;
-        margin-bottom: 30px;
-        text-align: center;
-        padding-bottom: 15px;
-        border-bottom: 3px solid #3498db;
-        font-size: 24px;
-        font-weight: 700;
-    }
-    
-    hr {
-        border: 0;
-        border-top: 2px solid #e0e0e0;
-        margin: 25px 0;
-        border-radius: 1px;
-    }
-    
-    pre {
-        background-color: #f8f9fa;
-        padding: 20px;
-        border-radius: 8px;
-        border: 1px solid #e9ecef;
-        white-space: pre-wrap;
-        font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
-        font-size: 14px;
-        line-height: 1.5;
-        max-height: 600px;
-        overflow-y: auto;
-    }
-    
-    .back-link {
-        margin-top: 20px;
-        text-align: center;
-    }
-    
-    .back-link a {
-        display: inline-block;
-        padding: 10px 20px;
-        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-        color: white;
-        text-decoration: none;
-        border-radius: 5px;
-        font-weight: bold;
-        transition: all 0.3s ease;
-        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-    
-    .back-link a:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-        text-decoration: none;
-    }
+
+body {
+    font-family: Arial;
+    margin: 40px;
+}
+
+.section {
+    border: 2px solid #444;
+    padding: 15px;
+    margin-top: 20px;
+}
+
+.title-block {
+    background-color: #eef;
+}
+
+.tech-block {
+    background-color: #efe;
+}
+
+pre {
+    font-size: 16px;
+}
+
 </style>
+
 </head>
 
 <body>
-    <div class="container">
-        <h2>
-            文件：{{ filename }}
-        </h2>
-        
-        <hr>
-        
-        {% if layout %}
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
-            <strong>图纸布局：</strong>{% if layout == 'horizontal' %}横向（横版图纸）{% else %}纵向（竖版图纸）{% endif %}
-        </div>
-        {% endif %}
-        
-        <pre>
-            {{ ocr_text }}
-        </pre>
-        
-        <div class="back-link">
-            <a href="/主页">返回图纸列表</a>
-        </div>
-    </div>
+
+<h2>文件名：</h2>
+
+<p>{{ filename }}</p>
+
+<h3>布局：</h3>
+
+<p>{{ layout }}</p>
+
+<div class="section title-block">
+
+<h2>标题栏</h2>
+
+<pre>
+
+{{ title_text }}
+
+</pre>
+
+</div>
+
+<div class="section tech-block">
+
+<h2>技术要求</h2>
+
+<pre>
+
+{{ tech_text }}
+
+</pre>
+
+</div>
+
 </body>
 
 </html>
