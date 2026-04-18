@@ -154,6 +154,15 @@ pre {
         {% endif %}
     </div>
 
+    <div class="section">
+        <h2>全部（全局OCR）</h2>
+        {% if all_text %}
+        <pre>{{ all_text }}</pre>
+        {% else %}
+        <div class="empty-message">全局OCR识别结果为空</div>
+        {% endif %}
+    </div>
+
     <div class="back-link">
         <a href="/主页" class="back-button">返回主页</a>
     </div>

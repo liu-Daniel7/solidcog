@@ -220,6 +220,22 @@ def split_regions_for_vertical_drawing(img):
         "tech_block": tech_block
     }
 
+def run_global_ocr(img):
+    """
+    全局OCR（整页）
+    """
+
+    ocr = get_ocr()
+
+    gray = enhance_image(img)
+
+    result = ocr.ocr(
+        gray,
+        cls=True
+    )
+
+    return extract_text(result)
+
 def extract_text(result):
     """文本过滤"""
     texts = []
@@ -274,6 +290,12 @@ def run_ocr(file_path):
                 # 直接转 numpy（更稳定）
                 cv_img = np.array(img)
                 
+                # =========================
+                # 全局 OCR（整页）
+                # =========================
+                
+                global_text = run_global_ocr(cv_img)
+                
                 # 判断横版
                 h, w = cv_img.shape[:2]
                 
@@ -300,6 +322,7 @@ def run_ocr(file_path):
                     page_result = {
                         "title_block": title_text,
                         "tech_block": tech_text,
+                        "all_text": global_text,
                         "layout": "horizontal"
                     }
                     all_text.append(page_result)
@@ -327,6 +350,7 @@ def run_ocr(file_path):
                     page_result = {
                         "title_block": title_text,
                         "tech_block": tech_text,
+                        "all_text": global_text,
                         "layout": "vertical"
                     }
                     all_text.append(page_result)
@@ -340,23 +364,27 @@ def run_ocr(file_path):
         # 合并结果
         title_texts = []
         tech_texts = []
+        all_texts = []
         layout = "unknown"
         
         for page_result in all_text:
             if isinstance(page_result, dict):
                 title_texts.append(page_result.get("title_block", ""))
                 tech_texts.append(page_result.get("tech_block", ""))
+                all_texts.append(page_result.get("all_text", ""))
                 if layout == "unknown":
                     layout = page_result.get("layout", "unknown")
         
         final_title = "\n\n".join(filter(None, title_texts))
         final_tech = "\n\n".join(filter(None, tech_texts))
+        final_all = "\n\n".join(filter(None, all_texts))
 
-        logger.info(f"OCR 完成，标题栏长度: {len(final_title)}, 技术要求长度: {len(final_tech)}")
+        logger.info(f"OCR 完成，标题栏长度: {len(final_title)}, 技术要求长度: {len(final_tech)}, 全局OCR长度: {len(final_all)}")
 
         return {
             "title_block": final_title,
             "tech_block": final_tech,
+            "all_text": final_all,
             "layout": layout
         }
 
@@ -367,6 +395,7 @@ def run_ocr(file_path):
         return {
             "title_block": f"OCR识别失败: {str(e)}",
             "tech_block": "",
+            "all_text": "",
             "layout": "unknown"
         }
 
@@ -392,6 +421,19 @@ def init_database():
             layout TEXT
         )
         """)
+
+        # 自动补充字段（安全）
+        cursor.execute("""
+        PRAGMA table_info(drawings)
+        """)
+
+        columns = [col[1] for col in cursor.fetchall()]
+
+        if "all_text" not in columns:
+            cursor.execute("""
+            ALTER TABLE drawings
+            ADD COLUMN all_text TEXT
+            """)
 
         conn.commit()
         logger.info("数据库初始化成功")
@@ -469,11 +511,13 @@ def upload_drawing(files: list[UploadFile] = File(...)):
             if isinstance(ocr_result, dict):
                 title_text = ocr_result.get("title_block", "")
                 tech_text = ocr_result.get("tech_block", "")
+                all_text = ocr_result.get("all_text", "")
                 layout = ocr_result.get("layout", "unknown")
             else:
                 # 兼容性处理
                 title_text = str(ocr_result)
                 tech_text = ""
+                all_text = ""
                 layout = "unknown"
 
             # 强制类型安全
@@ -483,14 +527,18 @@ def upload_drawing(files: list[UploadFile] = File(...)):
             if not isinstance(tech_text, str):
                 logger.warning(f"tech_text 不是字符串: {type(tech_text)}")
                 tech_text = str(tech_text)
+            if not isinstance(all_text, str):
+                logger.warning(f"all_text 不是字符串: {type(all_text)}")
+                all_text = str(all_text)
             if not isinstance(layout, str):
                 layout = str(layout)
 
             # 防止内容过长（SQLite数据过大）
             title_text = title_text[:100000]
             tech_text = tech_text[:100000]
+            all_text = all_text[:100000]
 
-            logger.info(f"OCR 完成: {new_filename}, 标题栏长度: {len(title_text)}, 技术要求长度: {len(tech_text)}, 布局: {layout}")
+            logger.info(f"OCR 完成: {new_filename}, 标题栏长度: {len(title_text)}, 技术要求长度: {len(tech_text)}, 全局OCR长度: {len(all_text)}, 布局: {layout}")
 
             # 写入数据库
             try:
@@ -506,9 +554,10 @@ def upload_drawing(files: list[UploadFile] = File(...)):
                         upload_time,
                         title_text,
                         tech_text,
+                        all_text,
                         layout
                     )
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_filename,
@@ -517,6 +566,7 @@ def upload_drawing(files: list[UploadFile] = File(...)):
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                         title_text,
                         tech_text,
+                        all_text,
                         layout
                     )
                 )
@@ -838,6 +888,7 @@ def view_ocr(request: Request, drawing_id: int):
                 filename, 
                 title_text, 
                 tech_text, 
+                all_text,
                 layout
             FROM drawings
             WHERE id=?
@@ -863,6 +914,8 @@ def view_ocr(request: Request, drawing_id: int):
 
         tech_text = row["tech_text"] or ""
 
+        all_text = row["all_text"] or ""
+
         layout = row["layout"] or "unknown"
 
         # 强制字符串（非常关键）
@@ -871,6 +924,8 @@ def view_ocr(request: Request, drawing_id: int):
         title_text = str(title_text)
 
         tech_text = str(tech_text)
+
+        all_text = str(all_text)
 
         layout = str(layout)
 
@@ -883,6 +938,10 @@ def view_ocr(request: Request, drawing_id: int):
 
             tech_text = tech_text[:200000]
 
+        if len(all_text) > 200000:
+
+            all_text = all_text[:200000]
+
         return templates.TemplateResponse(
             "ocr_view.html",
             {
@@ -890,6 +949,7 @@ def view_ocr(request: Request, drawing_id: int):
                 "filename": filename,
                 "title_text": title_text,
                 "tech_text": tech_text,
+                "all_text": all_text,
                 "layout": layout
             }
         )
