@@ -185,16 +185,16 @@ def run_ocr(file_path):
 
         if final_text:
             logger.info(f"OCR 完成，识别到 {len(text_result)} 行文本")
-            return {"text": final_text, "layout": layout}
+            return final_text
         else:
             logger.warning("OCR 识别结果为空")
-            return {"text": "OCR识别结果为空", "layout": layout}
+            return "OCR识别结果为空"
 
     except Exception as e:
         logger.error(f"OCR 失败: {e}")
         import traceback
         traceback.print_exc()
-        return {"text": f"OCR识别失败: {str(e)}", "layout": "unknown"}
+        return f"OCR识别失败: {str(e)}"
 
 # ==============================
 # 初始化数据库
@@ -213,8 +213,7 @@ def init_database():
             file_type TEXT,
             file_size INTEGER,
             upload_time TEXT,
-            ocr_text TEXT,
-            layout TEXT
+            ocr_text TEXT
         )
         """)
 
@@ -288,7 +287,18 @@ def upload_drawing(files: list[UploadFile] = File(...)):
             # 执行 OCR
             # ==============================
 
-            ocr_text = run_ocr(file_path)
+            ocr_result = run_ocr(file_path)
+
+            # 强制类型安全
+            if not isinstance(ocr_result, str):
+                logger.warning(f"OCR result 不是字符串: {type(ocr_result)}")
+                ocr_text = str(ocr_result)
+            else:
+                ocr_text = ocr_result
+
+            # 防止内容过长（SQLite数据过大）
+            ocr_text = ocr_text[:100000]
+
             logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}")
 
             # 写入数据库
