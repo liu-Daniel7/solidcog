@@ -90,12 +90,6 @@
         
         <hr>
         
-        {% if layout %}
-        <div style="background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: center;">
-            <strong>图纸布局：</strong>{% if layout == 'horizontal' %}横向（横版图纸）{% else %}纵向（竖版图纸）{% endif %}
-        </div>
-        {% endif %}
-        
         <pre>
             {{ ocr_text }}
         </pre>
