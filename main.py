@@ -35,6 +35,7 @@ def get_ocr():
         ocr_engine = PaddleOCR(
             use_angle_cls=True,
             lang="ch",
+            version='PP-OCRv3',
             det_db_thresh=0.2,
             det_db_box_thresh=0.3,
             rec_batch_num=6,
