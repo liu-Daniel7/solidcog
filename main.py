@@ -1,5 +1,6 @@
 import os
 import logging
+import traceback
 from datetime import datetime
 from typing import Optional
 
@@ -728,31 +729,71 @@ def get_ocr_text(drawing_id: int):
 @app.get("/查看OCR/{drawing_id}", response_class=HTMLResponse)
 def view_ocr(request: Request, drawing_id: int):
 
-    conn = get_db_connection()
-    cursor = conn.cursor()
+    try:
 
-    cursor.execute(
-        "SELECT filename, ocr_text, layout FROM drawings WHERE id=?",
-        (drawing_id,)
-    )
+        conn = get_db_connection()
+        cursor = conn.cursor()
 
-    row = cursor.fetchone()
-    print(row)
+        cursor.execute(
+            """
+            SELECT filename, ocr_text, layout
+            FROM drawings
+            WHERE id=?
+            """,
+            (drawing_id,)
+        )
 
-    conn.close()
+        row = cursor.fetchone()
 
-    if not row:
-        raise HTTPException(status_code=404, detail="未找到图纸")
+        conn.close()
 
-    return templates.TemplateResponse(
-        "ocr_view.html",
-        {
-            "request": request,
-            "filename": row["filename"],
-            "ocr_text": row["ocr_text"],
-            "layout": row.get("layout", "unknown")
-        }
-    )
+        if not row:
+
+            raise HTTPException(
+                status_code=404,
+                detail="未找到图纸"
+            )
+
+        # 防止 None
+        filename = row["filename"] or ""
+
+        ocr_text = row["ocr_text"] or ""
+
+        layout = row["layout"] or "unknown"
+
+        # 强制字符串（非常关键）
+        filename = str(filename)
+
+        ocr_text = str(ocr_text)
+
+        layout = str(layout)
+
+        # 防止文本过大导致模板崩
+        if len(ocr_text) > 200000:
+
+            ocr_text = ocr_text[:200000]
+
+        return templates.TemplateResponse(
+            "ocr_view.html",
+            {
+                "request": request,
+                "filename": filename,
+                "ocr_text": ocr_text,
+                "layout": layout
+            }
+        )
+
+    except Exception as e:
+
+        traceback.print_exc()
+
+        return HTMLResponse(
+            content=f"""
+            <h2>查看 OCR 出错</h2>
+            <p>{str(e)}</p>
+            """,
+            status_code=500
+        )
 
 
 @app.get("/导出OCR/{drawing_id}")
