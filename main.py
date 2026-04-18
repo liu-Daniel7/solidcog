@@ -99,7 +99,8 @@ def pdf_to_images(pdf_path):
     return convert_from_path(
         pdf_path,
         dpi=400,
-        fmt="png"
+        fmt="png",
+        thread_count=2
     )
 
 def enhance_image(img):
@@ -134,6 +135,50 @@ def ocr_requirement_region(region_img):
                     text_lines.append(text)
     return "\n".join(text_lines)
 
+def rotate_if_vertical_text(region):
+    """旋转竖排文字"""
+    h, w = region.shape[:2]
+    if h > w:
+        region = cv2.rotate(
+            region,
+            cv2.ROTATE_90_CLOCKWISE
+        )
+    return region
+
+def split_regions_for_horizontal_drawing(img):
+    """横版区域裁剪"""
+    h, w = img.shape[:2]
+    # 标题栏（左下）
+    title_block = img[
+        int(h * 0.72):h,
+        0:int(w * 0.18)
+    ]
+    # 技术要求（左中下）
+    tech_block = img[
+        int(h * 0.45):int(h * 0.72),
+        0:int(w * 0.35)
+    ]
+    # 旋转竖排文字
+    title_block = rotate_if_vertical_text(title_block)
+    tech_block = rotate_if_vertical_text(tech_block)
+    return {
+        "title_block": title_block,
+        "tech_block": tech_block
+    }
+
+def extract_text(result):
+    """文本过滤"""
+    texts = []
+    if not result or len(result) == 0:
+        return ""
+    for line in result[0]:
+        if isinstance(line, list) and len(line) > 1:
+            text = line[1][0] if len(line[1]) > 0 else ""
+            conf = line[1][1] if len(line[1]) > 1 else 0
+            if conf > 0.5 and len(text) >= 2:
+                texts.append(text)
+    return "\n".join(texts)
+
 # ==============================
 # OCR 识别函数
 # ==============================
@@ -166,8 +211,7 @@ def run_ocr(file_path):
             logger.error(f"不支持的文件类型: {ext}")
             return {"text": "不支持的文件类型", "layout": "unknown"}
 
-        text_result = []
-        layout = "unknown"
+        all_text = []
 
         for i, img in enumerate(images, 1):
             try:
@@ -176,69 +220,72 @@ def run_ocr(file_path):
                 # 直接转 numpy（更稳定）
                 cv_img = np.array(img)
                 
-                try:
-                    regions = split_regions(cv_img)
-                    layout = regions["layout"]
-                    title_block = regions["title_block"]
-                    tech_block = regions["tech_requirement"]
-                except Exception as e:
-                    logger.warning(f"区域分割失败，使用整图 OCR: {e}")
-                    layout = "unknown"
-                    title_block = cv_img
-                    tech_block = cv_img
+                # 判断横版
+                h, w = cv_img.shape[:2]
                 
-                # 提升识别率 - 图像增强
-                title_gray = enhance_image(title_block)
-                tech_gray = enhance_image(tech_block)
+                if w > h:
+                    logger.info("检测到横版图纸")
+                    # 横版处理
+                    regions = split_regions_for_horizontal_drawing(cv_img)
+                    title_img = regions["title_block"]
+                    tech_img = regions["tech_block"]
+                    
+                    # 图像增强
+                    title_gray = enhance_image(title_img)
+                    tech_gray = enhance_image(tech_img)
+                    
+                    # OCR
+                    title_res = ocr.ocr(title_gray, cls=True)
+                    tech_res = ocr.ocr(tech_gray, cls=True)
+                    
+                    # 提取文本
+                    title_text = extract_text(title_res)
+                    tech_text = extract_text(tech_res)
+                    
+                    # 构建结果
+                    page_text = ""
+                    if title_text:
+                        page_text += "[标题栏]\n"
+                        page_text += title_text
+                        page_text += "\n\n"
+                    if tech_text:
+                        page_text += "[技术要求]\n"
+                        page_text += tech_text
+                    
+                    if page_text:
+                        all_text.append(page_text)
+                    
+                else:
+                    logger.info("检测到竖版图纸")
+                    # 竖版处理
+                    gray = enhance_image(cv_img)
+                    res = ocr.ocr(gray, cls=True)
+                    text = extract_text(res)
+                    if text:
+                        all_text.append(text)
                 
-                # 对标题栏进行OCR
-                title_result = ocr.ocr(title_gray, cls=True)
-                if title_result:
-                    for page_result in title_result:
-                        if isinstance(page_result, list):
-                            for text_box in page_result:
-                                if isinstance(text_box, list) and len(text_box) == 2:
-                                    if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
-                                        text = text_box[1][0]
-                                        text_result.append(f"[标题栏] {text}")
-                                        logger.info(f"标题栏识别到: {text}")
-                
-                # 对技术要求进行OCR
-                tech_result = ocr.ocr(tech_gray, cls=True)
-                if tech_result:
-                    for page_result in tech_result:
-                        if isinstance(page_result, list):
-                            for text_box in page_result:
-                                if isinstance(text_box, list) and len(text_box) == 2:
-                                    if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
-                                        text = text_box[1][0]
-                                        text_result.append(f"[技术要求] {text}")
-                                        logger.info(f"技术要求识别到: {text}")
-                
-                logger.info(f"当前识别到的文本数量: {len(text_result)}")
             except Exception as e:
                 logger.warning(f"处理图片时OCR失败: {e}")
                 import traceback
                 traceback.print_exc()
                 continue
 
-        final_text = "\n".join(text_result)
+        final_text = "\n\n".join(all_text)
 
         logger.info(f"最终识别结果长度: {len(final_text)}")
-        logger.info(f"图纸布局: {layout}")
 
         if final_text:
-            logger.info(f"OCR 完成，识别到 {len(text_result)} 行文本")
-            return final_text
+            logger.info(f"OCR 完成")
+            return {"text": final_text, "layout": "horizontal" if len(images) > 0 and images[0].width > images[0].height else "vertical"}
         else:
             logger.warning("OCR 识别结果为空")
-            return "OCR识别结果为空"
+            return {"text": "OCR识别结果为空", "layout": "unknown"}
 
     except Exception as e:
         logger.error(f"OCR 失败: {e}")
         import traceback
         traceback.print_exc()
-        return f"OCR识别失败: {str(e)}"
+        return {"text": f"OCR识别失败: {str(e)}", "layout": "unknown"}
 
 # ==============================
 # 初始化数据库
@@ -257,7 +304,8 @@ def init_database():
             file_type TEXT,
             file_size INTEGER,
             upload_time TEXT,
-            ocr_text TEXT
+            ocr_text TEXT,
+            layout TEXT
         )
         """)
 
@@ -333,17 +381,26 @@ def upload_drawing(files: list[UploadFile] = File(...)):
 
             ocr_result = run_ocr(file_path)
 
-            # 强制类型安全
-            if not isinstance(ocr_result, str):
-                logger.warning(f"OCR result 不是字符串: {type(ocr_result)}")
-                ocr_text = str(ocr_result)
+            # 处理 OCR 结果
+            if isinstance(ocr_result, dict):
+                ocr_text = ocr_result.get("text", "")
+                layout = ocr_result.get("layout", "unknown")
             else:
-                ocr_text = ocr_result
+                # 兼容性处理
+                ocr_text = str(ocr_result)
+                layout = "unknown"
+
+            # 强制类型安全
+            if not isinstance(ocr_text, str):
+                logger.warning(f"OCR text 不是字符串: {type(ocr_text)}")
+                ocr_text = str(ocr_text)
+            if not isinstance(layout, str):
+                layout = str(layout)
 
             # 防止内容过长（SQLite数据过大）
             ocr_text = ocr_text[:100000]
 
-            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}")
+            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}, 布局: {layout}")
 
             # 写入数据库
             try:
@@ -352,15 +409,16 @@ def upload_drawing(files: list[UploadFile] = File(...)):
                 cursor.execute(
                     """
                     INSERT INTO drawings
-                    (filename, file_type, file_size, upload_time, ocr_text)
-                    VALUES (?, ?, ?, ?, ?)
+                    (filename, file_type, file_size, upload_time, ocr_text, layout)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_filename,
                         ext,
                         file_size,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        ocr_text
+                        ocr_text,
+                        layout
                     )
                 )
                 conn.commit()
@@ -674,7 +732,7 @@ def view_ocr(request: Request, drawing_id: int):
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT filename, ocr_text FROM drawings WHERE id=?",
+        "SELECT filename, ocr_text, layout FROM drawings WHERE id=?",
         (drawing_id,)
     )
 
@@ -691,7 +749,8 @@ def view_ocr(request: Request, drawing_id: int):
         {
             "request": request,
             "filename": row["filename"],
-            "ocr_text": row["ocr_text"]
+            "ocr_text": row["ocr_text"],
+            "layout": row.get("layout", "unknown")
         }
     )
 
