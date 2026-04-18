@@ -267,10 +267,15 @@ def upload_drawing(files: list[UploadFile] = File(...)):
             # 执行 OCR
             # ==============================
 
-            ocr_result = run_ocr(file_path)
-            ocr_text = ocr_result["text"]
-            layout = ocr_result["layout"]
-            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}, 布局: {layout}")
+            try:
+                ocr_result = run_ocr(file_path)
+                ocr_text = ocr_result["text"]
+                layout = ocr_result["layout"]
+                logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}, 布局: {layout}")
+            except Exception as e:
+                logger.error(f"OCR 处理失败: {e}")
+                ocr_text = f"OCR处理失败: {str(e)}"
+                layout = "unknown"
 
             # 写入数据库
             try:
