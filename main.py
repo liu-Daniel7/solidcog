@@ -10,7 +10,11 @@ from fastapi.templating import Jinja2Templates
 
 import sqlite3
 import shutil
+import cv2
+import numpy as np
 from pdf2image import convert_from_path
+
+from layout_splitter import split_regions
 
 # PaddleOCR 将在函数内部导入
 
@@ -100,9 +104,10 @@ def run_ocr(file_path):
             logger.info("PNG 图片加载完成")
         else:
             logger.error(f"不支持的文件类型: {ext}")
-            return "不支持的文件类型"
+            return {"text": "不支持的文件类型", "layout": "unknown"}
 
         text_result = []
+        layout = "unknown"
 
         for i, img in enumerate(images, 1):
             try:
@@ -111,25 +116,63 @@ def run_ocr(file_path):
                 img_path = f"temp_page_{i}.png"
                 img.save(img_path)
                 logger.info(f"保存图片到: {img_path}")
-                
-                # 尝试使用文件路径而不是PIL Image对象
-                result = ocr.ocr(img_path, cls=True)
-                logger.info(f"OCR 结果类型: {type(result)}")
-                logger.info(f"OCR 结果长度: {len(result) if result else 0}")
 
-                # 处理 OCR 结果 - PaddleOCR 2.6.1.3 版本的返回格式
-                if result:
-                    # 遍历页面结果
-                    for page_result in result:
-                        if isinstance(page_result, list):
-                            # 遍历每个文本框
-                            for text_box in page_result:
-                                if isinstance(text_box, list) and len(text_box) == 2:
-                                    # 第二个元素是文本和置信度的元组
-                                    if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
-                                        text = text_box[1][0]
-                                        text_result.append(text)
-                                        logger.info(f"识别到文本: {text}")
+                # 读取图片并转换为numpy数组
+                cv_img = cv2.imread(img_path)
+                if cv_img is not None:
+                    # 使用布局分割器分割标题栏和技术要求区域
+                    regions = split_regions(cv_img)
+                    layout = regions["layout"]
+                    title_block = regions["title_block"]
+                    tech_block = regions["tech_requirement"]
+
+                    # 保存分割后的区域图片
+                    title_path = f"temp_title_{i}.png"
+                    tech_path = f"temp_tech_{i}.png"
+                    cv2.imwrite(title_path, title_block)
+                    cv2.imwrite(tech_path, tech_block)
+                    logger.info(f"标题栏保存到: {title_path}")
+                    logger.info(f"技术要求保存到: {tech_path}")
+
+                    # 对标题栏进行OCR
+                    title_result = ocr.ocr(title_path, cls=True)
+                    if title_result:
+                        for page_result in title_result:
+                            if isinstance(page_result, list):
+                                for text_box in page_result:
+                                    if isinstance(text_box, list) and len(text_box) == 2:
+                                        if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
+                                            text = text_box[1][0]
+                                            text_result.append(f"[标题栏] {text}")
+                                            logger.info(f"标题栏识别到: {text}")
+
+                    # 对技术要求进行OCR
+                    tech_result = ocr.ocr(tech_path, cls=True)
+                    if tech_result:
+                        for page_result in tech_result:
+                            if isinstance(page_result, list):
+                                for text_box in page_result:
+                                    if isinstance(text_box, list) and len(text_box) == 2:
+                                        if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
+                                            text = text_box[1][0]
+                                            text_result.append(f"[技术要求] {text}")
+                                            logger.info(f"技术要求识别到: {text}")
+                else:
+                    # 如果cv2读取失败，使用原来的方式
+                    result = ocr.ocr(img_path, cls=True)
+                    logger.info(f"OCR 结果类型: {type(result)}")
+                    logger.info(f"OCR 结果长度: {len(result) if result else 0}")
+
+                    if result:
+                        for page_result in result:
+                            if isinstance(page_result, list):
+                                for text_box in page_result:
+                                    if isinstance(text_box, list) and len(text_box) == 2:
+                                        if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
+                                            text = text_box[1][0]
+                                            text_result.append(text)
+                                            logger.info(f"识别到文本: {text}")
+
                 logger.info(f"当前识别到的文本数量: {len(text_result)}")
             except Exception as e:
                 logger.warning(f"处理图片时OCR失败: {e}")
@@ -140,20 +183,20 @@ def run_ocr(file_path):
         final_text = "\n".join(text_result)
 
         logger.info(f"最终识别结果长度: {len(final_text)}")
+        logger.info(f"图纸布局: {layout}")
 
         if final_text:
             logger.info(f"OCR 完成，识别到 {len(text_result)} 行文本")
-            return final_text
+            return {"text": final_text, "layout": layout}
         else:
             logger.warning("OCR 识别结果为空")
-            return "OCR识别结果为空"
+            return {"text": "OCR识别结果为空", "layout": layout}
 
     except Exception as e:
         logger.error(f"OCR 失败: {e}")
         import traceback
         traceback.print_exc()
-        # 返回错误信息，而不是空字符串，这样可以在前端看到错误
-        return f"OCR识别失败: {str(e)}"
+        return {"text": f"OCR识别失败: {str(e)}", "layout": "unknown"}
 
 # ==============================
 # 初始化数据库
@@ -172,7 +215,8 @@ def init_database():
             file_type TEXT,
             file_size INTEGER,
             upload_time TEXT,
-            ocr_text TEXT
+            ocr_text TEXT,
+            layout TEXT
         )
         """)
 
@@ -246,8 +290,10 @@ def upload_drawing(files: list[UploadFile] = File(...)):
             # 执行 OCR
             # ==============================
 
-            ocr_text = run_ocr(file_path)
-            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}")
+            ocr_result = run_ocr(file_path)
+            ocr_text = ocr_result["text"]
+            layout = ocr_result["layout"]
+            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}, 布局: {layout}")
 
             # 写入数据库
             try:
@@ -256,15 +302,16 @@ def upload_drawing(files: list[UploadFile] = File(...)):
                 cursor.execute(
                     """
                     INSERT INTO drawings
-                    (filename, file_type, file_size, upload_time, ocr_text)
-                    VALUES (?, ?, ?, ?, ?)
+                    (filename, file_type, file_size, upload_time, ocr_text, layout)
+                    VALUES (?, ?, ?, ?, ?, ?)
                     """,
                     (
                         new_filename,
                         ext,
                         file_size,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        ocr_text
+                        ocr_text,
+                        layout
                     )
                 )
                 conn.commit()
@@ -573,7 +620,7 @@ def view_ocr(request: Request, drawing_id: int):
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT filename, ocr_text FROM drawings WHERE id=?",
+        "SELECT filename, ocr_text, layout FROM drawings WHERE id=?",
         (drawing_id,)
     )
 
@@ -589,7 +636,8 @@ def view_ocr(request: Request, drawing_id: int):
         {
             "request": request,
             "filename": row["filename"],
-            "ocr_text": row["ocr_text"]
+            "ocr_text": row["ocr_text"],
+            "layout": row["layout"]
         }
     )
 
