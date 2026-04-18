@@ -225,6 +225,7 @@ def root():
 def upload_drawing(files: list[UploadFile] = File(...)):
     """上传 PDF 图纸或 PNG 图片（支持批量上传）"""
     try:
+        logger.info(f"开始处理上传请求，文件数量: {len(files)}")
         # 检查文件数量
         if len(files) == 0:
             raise HTTPException(status_code=400, detail="请选择至少一个文件")
@@ -300,6 +301,8 @@ def upload_drawing(files: list[UploadFile] = File(...)):
         raise
     except Exception as e:
         logger.error(f"上传图纸失败: {e}")
+        import traceback
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail="上传图纸失败")
 
 # ==============================
