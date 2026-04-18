@@ -7,26 +7,116 @@
 <style>
 
 body {
-    font-family: Arial;
-    margin: 40px;
+    font-family: Arial, sans-serif;
+    margin: 0;
+    padding: 20px;
+    background-color: #f5f5f5;
+}
+
+.container {
+    max-width: 1200px;
+    margin: 0 auto;
+    background-color: white;
+    padding: 30px;
+    border-radius: 8px;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+.header {
+    margin-bottom: 30px;
+    padding-bottom: 20px;
+    border-bottom: 2px solid #e0e0e0;
+}
+
+.header h1 {
+    color: #333;
+    margin: 0 0 10px 0;
+}
+
+.info-section {
+    background-color: #f9f9f9;
+    padding: 20px;
+    border-radius: 6px;
+    margin-bottom: 30px;
+}
+
+.info-section h3 {
+    color: #555;
+    margin: 0 0 10px 0;
+}
+
+.info-section p {
+    color: #666;
+    margin: 5px 0;
+    font-size: 16px;
 }
 
 .section {
     border: 2px solid #444;
-    padding: 15px;
-    margin-top: 20px;
+    padding: 20px;
+    margin-bottom: 30px;
+    border-radius: 6px;
+    background-color: white;
 }
 
 .title-block {
-    background-color: #eef;
+    border-left: 5px solid #667eea;
+    background-color: #f8f9ff;
 }
 
 .tech-block {
-    background-color: #efe;
+    border-left: 5px solid #4caf50;
+    background-color: #f8fff8;
+}
+
+.section h2 {
+    color: #333;
+    margin: 0 0 20px 0;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #e0e0e0;
 }
 
 pre {
     font-size: 16px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    background-color: #f9f9f9;
+    padding: 15px;
+    border-radius: 4px;
+    border: 1px solid #e0e0e0;
+    max-height: 400px;
+    overflow-y: auto;
+}
+
+.back-link {
+    margin-top: 30px;
+    text-align: center;
+}
+
+.back-button {
+    display: inline-block;
+    padding: 12px 24px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    text-decoration: none;
+    border-radius: 6px;
+    font-size: 16px;
+    font-weight: bold;
+    transition: background 0.3s ease;
+}
+
+.back-button:hover {
+    background: linear-gradient(135deg, #5a6fd8 0%, #684196 100%);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+}
+
+.empty-message {
+    color: #999;
+    font-style: italic;
+    text-align: center;
+    padding: 40px 0;
 }
 
 </style>
@@ -35,36 +125,38 @@ pre {
 
 <body>
 
-<h2>文件名：</h2>
+<div class="container">
+    <div class="header">
+        <h1>OCR 识别结果</h1>
+    </div>
 
-<p>{{ filename }}</p>
+    <div class="info-section">
+        <h3>文件信息</h3>
+        <p><strong>文件名：</strong>{{ filename }}</p>
+        <p><strong>布局：</strong>{{ layout }}</p>
+    </div>
 
-<h3>布局：</h3>
+    <div class="section title-block">
+        <h2>标题栏</h2>
+        {% if title_text %}
+        <pre>{{ title_text }}</pre>
+        {% else %}
+        <div class="empty-message">标题栏识别结果为空</div>
+        {% endif %}
+    </div>
 
-<p>{{ layout }}</p>
+    <div class="section tech-block">
+        <h2>技术要求</h2>
+        {% if tech_text %}
+        <pre>{{ tech_text }}</pre>
+        {% else %}
+        <div class="empty-message">技术要求识别结果为空</div>
+        {% endif %}
+    </div>
 
-<div class="section title-block">
-
-<h2>标题栏</h2>
-
-<pre>
-
-{{ title_text }}
-
-</pre>
-
-</div>
-
-<div class="section tech-block">
-
-<h2>技术要求</h2>
-
-<pre>
-
-{{ tech_text }}
-
-</pre>
-
+    <div class="back-link">
+        <a href="/主页" class="back-button">返回主页</a>
+    </div>
 </div>
 
 </body>
