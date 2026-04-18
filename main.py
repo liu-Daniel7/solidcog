@@ -288,10 +288,8 @@ def upload_drawing(files: list[UploadFile] = File(...)):
             # 执行 OCR
             # ==============================
 
-            ocr_result = run_ocr(file_path)
-            ocr_text = ocr_result["text"]
-            layout = ocr_result["layout"]
-            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}, 布局: {layout}")
+            ocr_text = run_ocr(file_path)
+            logger.info(f"OCR 完成: {new_filename}, 识别长度: {len(ocr_text)}")
 
             # 写入数据库
             try:
@@ -300,16 +298,15 @@ def upload_drawing(files: list[UploadFile] = File(...)):
                 cursor.execute(
                     """
                     INSERT INTO drawings
-                    (filename, file_type, file_size, upload_time, ocr_text, layout)
-                    VALUES (?, ?, ?, ?, ?, ?)
+                    (filename, file_type, file_size, upload_time, ocr_text)
+                    VALUES (?, ?, ?, ?, ?)
                     """,
                     (
                         new_filename,
                         ext,
                         file_size,
                         datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-                        ocr_text,
-                        layout
+                        ocr_text
                     )
                 )
                 conn.commit()
@@ -323,8 +320,13 @@ def upload_drawing(files: list[UploadFile] = File(...)):
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"上传图纸失败: {e}")
-        raise HTTPException(status_code=500, detail="上传图纸失败")
+        import traceback
+        logger.error("上传图纸失败")
+        traceback.print_exc()
+        raise HTTPException(
+            status_code=500,
+            detail=str(e)
+        )
 
 # ==============================
 # 查看图纸列表
