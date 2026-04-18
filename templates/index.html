@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>工程数字图纸管理系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background-color: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            padding: 30px;
+        }
+        
+        h2 {
+            color: #2c3e50;
+            margin-bottom: 30px;
+            text-align: center;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #3498db;
+            font-size: 28px;
+            font-weight: 700;
+            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
+            letter-spacing: 2px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        h3 {
+            color: #2c3e50;
+            margin: 25px 0 20px;
+            font-size: 20px;
+            font-weight: 600;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
+            letter-spacing: 1px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 12px 15px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            border-left: 4px solid #3498db;
+        }
+        
+        hr {
+            border: 0;
+            border-top: 2px solid #e0e0e0;
+            margin: 25px 0;
+            border-radius: 1px;
+        }
+        
+        .upload-form {
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            padding: 25px;
+            border-radius: 8px;
+            margin-bottom: 25px;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+            border: 1px solid #dee2e6;
+        }
+        
+        .form-group {
+            margin-bottom: 20px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #2c3e50;
+            font-size: 16px;
+        }
+        
+        input[type="text"] {
+            display: block;
+            margin-bottom: 15px;
+            padding: 16px 20px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            width: 100%;
+            background-color: white;
+            font-size: 18px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-weight: 400;
+            color: #333;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        input[type="text"]:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+            transform: translateY(-1px);
+        }
+        
+        input[type="file"] {
+            display: block;
+            margin-bottom: 15px;
+            padding: 16px 20px;
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            width: 100%;
+            background-color: white;
+            font-size: 18px;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            font-weight: 400;
+            color: #333;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        }
+        
+        input[type="file"]:focus {
+            outline: none;
+            border-color: #3498db;
+            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
+            transform: translateY(-1px);
+        }
+        
+        button[type="submit"] {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+        }
+        
+        button[type="submit"]:hover {
+            background: linear-gradient(135deg, #2980b9 0%, #1f618d 100%);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 25px;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+        }
+        
+        th, td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        th {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+            color: white;
+            font-weight: 600;
+            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
+            letter-spacing: 1px;
+        }
+        
+        tr {
+            transition: background-color 0.3s ease;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        th {
+            transition: none;
+        }
+        
+        th:hover {
+            transform: none;
+        }
+        
+        a {
+            color: #3498db;
+            text-decoration: none;
+            transition: all 0.3s ease;
+            font-weight: 500;
+        }
+        
+        a:hover {
+            color: #2980b9;
+            text-decoration: underline;
+            transform: translateY(-1px);
+        }
+        
+        .delete-btn {
+            color: #e74c3c;
+            font-weight: 600;
+        }
+        
+        .delete-btn:hover {
+            color: #c0392b;
+            transform: translateY(-1px);
+        }
+        
+        .no-data {
+            text-align: center;
+            padding: 60px;
+            color: #7f8c8d;
+            font-style: italic;
+            font-size: 18px;
+            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
+            border-radius: 8px;
+            margin-top: 25px;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 20px;
+            }
+            
+            table {
+                font-size: 14px;
+            }
+            
+            th, td {
+                padding: 8px;
+            }
+        }
+        
+        .search-results {
+            margin-bottom: 30px;
+        }
+        
+        .back-link {
+            margin-top: 20px;
+            text-align: center;
+        }
+        
+        .back-link a {
+            display: inline-block;
+            padding: 10px 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            font-weight: bold;
+            transition: all 0.3s ease;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+        }
+        
+        .back-link a:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>工程数字图纸智能管理系统</h2>
+        
+        <hr>
+        
+        <h3>搜索图纸 (OCR)</h3>
+        <div class="upload-form">
+            <form action="/搜索图纸" method="get">
+                <input
+                    type="text"
+                    name="keyword"
+                    placeholder="输入关键词，例如：钢筋"
+                    value="{{ search_keyword }}"
+                    style="width:300px;height:35px;font-size:16px;"
+                >
+                <select name="sort" style="height:35px;font-size:16px;">
+                    <option value="desc" {% if sort == 'desc' %}selected{% endif %}>时间最新</option>
+                    <option value="asc" {% if sort == 'asc' %}selected{% endif %}>时间最早</option>
+                </select>
+                <button type="submit" style="height:35px;font-size:16px;">🔍 搜索</button>
+            </form>
+        </div>
+        <br>
+
+        <h3>上传图纸（PDF/PNG）</h3>
+        <div class="upload-form">
+            <form action="/上传图纸" method="post" enctype="multipart/form-data">
+                <div class="form-group">
+                    <label for="files">选择文件（可多选，支持PDF和PNG格式）：</label>
+                    <input type="file" id="files" name="files" accept=".pdf,.png" multiple required>
+                    <p style="margin-top: 10px; color: #666; font-size: 14px;">支持的文件格式：PDF文档和PNG图片</p>
+                </div>
+                <button type="submit">上传图纸</button>
+            </form>
+        </div>
+        
+        <hr>
+        
+        {% if search_keyword %}
+        <p>
+            当前搜索关键词：
+            <b>{{ search_keyword }}</b>
+        </p>
+        <h3>搜索结果</h3>
+        <div class="search-results">
+            <table>
+                <tr>
+                    <th>编号</th>
+                    <th>文件名</th>
+                    <th>文件大小(MB)</th>
+                    <th>上传时间</th>
+                    <th>操作</th>
+                </tr>
+                {% if 图纸列表 %}
+                    {% for d in 图纸列表 %}
+                    <tr>
+                        <td>{{ d[0] }}</td>
+                        <td>
+                            <a href="/uploads/{{ d[1] }}" target="_blank">{{ d[1] }}</a>
+                        </td>
+                        <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }}</td>
+                        <td>{{ d[4] }}</td>
+                        <td>
+                            <a href="/删除图纸/{{ d[5] }}" class="delete-btn" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
+                            |
+                            <a href="/查看OCR/{{ d[5] }}">查看OCR</a>
+                            |
+                            <a href="/导出OCR/{{ d[5] }}">导出OCR</a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                {% else %}
+                    <tr>
+                        <td colspan="5" class="no-data">未找到匹配的图纸</td>
+                    </tr>
+                {% endif %}
+            </table>
+            <div class="back-link">
+                <a href="/主页">返回图纸列表</a>
+            </div>
+            <div style="margin-top: 20px;">
+                <a href="/搜索图纸?keyword={{ search_keyword }}&page={{ page - 1 }}&sort={{ sort }}">上一页</a>
+                |
+                <a href="/搜索图纸?keyword={{ search_keyword }}&page={{ page + 1 }}&sort={{ sort }}">下一页</a>
+            </div>
+        </div>
+        {% else %}
+        <h3 style="display: flex; justify-content: space-between; align-items: center;">
+            图纸列表
+            <button onclick="if(confirm('确定要删除所有图纸吗？此操作不可恢复！')) { window.location.href = '/删除所有图纸'; }" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;">
+                全部删除
+            </button>
+        </h3>
+        <table>
+            <tr>
+                <th>编号</th>
+                <th>文件名</th>
+                <th>文件大小(MB)</th>
+                <th>上传时间</th>
+                <th>操作</th>
+            </tr>
+            {% if 图纸列表 %}
+                {% for d in 图纸列表 %}
+                <tr>
+                    <td>{{ d[0] }}</td>
+                    <td>
+                        <a href="/uploads/{{ d[1] }}" target="_blank">{{ d[1] }}</a>
+                    </td>
+                    <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }}</td>
+                    <td>{{ d[4] }}</td>
+                    <td>
+                            <a href="/删除图纸/{{ d[5] }}" class="delete-btn" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
+                            |
+                            <a href="/查看OCR/{{ d[5] }}">查看OCR</a>
+                            |
+                            <a href="/导出OCR/{{ d[5] }}">导出OCR</a>
+                        </td>
+                </tr>
+                {% endfor %}
+            {% else %}
+                <tr>
+                    <td colspan="5" class="no-data">暂无图纸数据</td>
+                </tr>
+            {% endif %}
+        </table>
+        {% endif %}
+    </div>
+</body>
+</html>
