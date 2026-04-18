@@ -16,7 +16,29 @@ from pdf2image import convert_from_path
 
 from layout_splitter import split_regions
 
-# PaddleOCR 将在函数内部导入
+# ==============================
+# 全局 OCR（只初始化一次）
+# ==============================
+
+ocr_engine = None
+
+def get_ocr():
+
+    global ocr_engine
+
+    if ocr_engine is None:
+
+        logger.info("初始化 PaddleOCR（仅一次）")
+
+        from paddleocr import PaddleOCR
+
+        ocr_engine = PaddleOCR(
+            use_angle_cls=True,
+            lang="ch",
+            show_log=False
+        )
+
+    return ocr_engine
 
 # 配置日志
 logging.basicConfig(
@@ -76,14 +98,8 @@ def run_ocr(file_path):
     try:
         logger.info("开始 OCR 识别")
 
-        # 使用 PaddleOCR 2.6.1.3 版本
-        from paddleocr import PaddleOCR
-
-        # 初始化 OCR 引擎
-        ocr = PaddleOCR(
-            use_angle_cls=True,  # 启用角度分类，提高识别率
-            lang="ch"
-        )
+        # 使用全局 OCR 引擎
+        ocr = get_ocr()
 
         # 检查文件类型
         ext = os.path.splitext(file_path)[1].lower()
@@ -112,67 +128,49 @@ def run_ocr(file_path):
         for i, img in enumerate(images, 1):
             try:
                 logger.info(f"处理第 {i} 页图片")
-                # 保存图片以便调试
-                img_path = f"temp_page_{i}.png"
-                img.save(img_path)
-                logger.info(f"保存图片到: {img_path}")
-
-                # 读取图片并转换为numpy数组
-                cv_img = cv2.imread(img_path)
-                if cv_img is not None:
-                    # 使用布局分割器分割标题栏和技术要求区域
+                
+                # 直接转 numpy（更稳定）
+                cv_img = np.array(img)
+                
+                try:
                     regions = split_regions(cv_img)
                     layout = regions["layout"]
                     title_block = regions["title_block"]
                     tech_block = regions["tech_requirement"]
-
-                    # 保存分割后的区域图片
-                    title_path = f"temp_title_{i}.png"
-                    tech_path = f"temp_tech_{i}.png"
-                    cv2.imwrite(title_path, title_block)
-                    cv2.imwrite(tech_path, tech_block)
-                    logger.info(f"标题栏保存到: {title_path}")
-                    logger.info(f"技术要求保存到: {tech_path}")
-
-                    # 对标题栏进行OCR
-                    title_result = ocr.ocr(title_path, cls=True)
-                    if title_result:
-                        for page_result in title_result:
-                            if isinstance(page_result, list):
-                                for text_box in page_result:
-                                    if isinstance(text_box, list) and len(text_box) == 2:
-                                        if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
-                                            text = text_box[1][0]
-                                            text_result.append(f"[标题栏] {text}")
-                                            logger.info(f"标题栏识别到: {text}")
-
-                    # 对技术要求进行OCR
-                    tech_result = ocr.ocr(tech_path, cls=True)
-                    if tech_result:
-                        for page_result in tech_result:
-                            if isinstance(page_result, list):
-                                for text_box in page_result:
-                                    if isinstance(text_box, list) and len(text_box) == 2:
-                                        if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
-                                            text = text_box[1][0]
-                                            text_result.append(f"[技术要求] {text}")
-                                            logger.info(f"技术要求识别到: {text}")
-                else:
-                    # 如果cv2读取失败，使用原来的方式
-                    result = ocr.ocr(img_path, cls=True)
-                    logger.info(f"OCR 结果类型: {type(result)}")
-                    logger.info(f"OCR 结果长度: {len(result) if result else 0}")
-
-                    if result:
-                        for page_result in result:
-                            if isinstance(page_result, list):
-                                for text_box in page_result:
-                                    if isinstance(text_box, list) and len(text_box) == 2:
-                                        if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
-                                            text = text_box[1][0]
-                                            text_result.append(text)
-                                            logger.info(f"识别到文本: {text}")
-
+                except Exception as e:
+                    logger.warning(f"区域分割失败，使用整图 OCR: {e}")
+                    layout = "unknown"
+                    title_block = cv_img
+                    tech_block = cv_img
+                
+                # 提升识别率
+                title_gray = cv2.cvtColor(title_block, cv2.COLOR_BGR2GRAY)
+                tech_gray = cv2.cvtColor(tech_block, cv2.COLOR_BGR2GRAY)
+                
+                # 对标题栏进行OCR
+                title_result = ocr.ocr(title_gray, cls=True)
+                if title_result:
+                    for page_result in title_result:
+                        if isinstance(page_result, list):
+                            for text_box in page_result:
+                                if isinstance(text_box, list) and len(text_box) == 2:
+                                    if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
+                                        text = text_box[1][0]
+                                        text_result.append(f"[标题栏] {text}")
+                                        logger.info(f"标题栏识别到: {text}")
+                
+                # 对技术要求进行OCR
+                tech_result = ocr.ocr(tech_gray, cls=True)
+                if tech_result:
+                    for page_result in tech_result:
+                        if isinstance(page_result, list):
+                            for text_box in page_result:
+                                if isinstance(text_box, list) and len(text_box) == 2:
+                                    if isinstance(text_box[1], tuple) and len(text_box[1]) > 0:
+                                        text = text_box[1][0]
+                                        text_result.append(f"[技术要求] {text}")
+                                        logger.info(f"技术要求识别到: {text}")
+                
                 logger.info(f"当前识别到的文本数量: {len(text_result)}")
             except Exception as e:
                 logger.warning(f"处理图片时OCR失败: {e}")
