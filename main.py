@@ -213,17 +213,9 @@ init_database()
 # ==============================
 
 @app.get("/")
-def system_status():
-    """系统状态接口"""
-    try:
-        return {
-            "系统名称": "工程数字图纸智能管理系统",
-            "运行状态": "系统运行正常",
-            "时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
-    except Exception as e:
-        logger.error(f"系统状态接口错误: {e}")
-        raise HTTPException(status_code=500, detail="系统状态查询失败")
+def root():
+    """根路径重定向到主页"""
+    return RedirectResponse(url="/主页", status_code=303)
 
 # ==============================
 # 上传 PDF 图纸
