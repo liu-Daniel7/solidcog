@@ -8,6 +8,8 @@ from fastapi import FastAPI, File, UploadFile, Request, HTTPException
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from pydantic import BaseModel
+import requests
 
 import sqlite3
 import shutil
@@ -23,22 +25,16 @@ from layout_splitter import split_regions
 ocr_engine = None
 
 def get_ocr():
-
     global ocr_engine
 
     if ocr_engine is None:
-
-        logger.info("初始化 PaddleOCR（仅一次）")
+        logger.info("初始化 PaddleOCR")
 
         from paddleocr import PaddleOCR
 
         ocr_engine = PaddleOCR(
             use_angle_cls=True,
             lang="ch",
-            version='PP-OCRv3',
-            det_db_thresh=0.2,
-            det_db_box_thresh=0.3,
-            rec_batch_num=6,
             show_log=False
         )
 
@@ -261,9 +257,6 @@ def run_ocr(file_path):
     try:
         logger.info("开始 OCR 识别")
 
-        # 使用全局 OCR 引擎
-        ocr = get_ocr()
-
         # 检查文件类型
         ext = os.path.splitext(file_path)[1].lower()
         images = []
@@ -281,6 +274,37 @@ def run_ocr(file_path):
         else:
             logger.error(f"不支持的文件类型: {ext}")
             return {"text": "不支持的文件类型", "layout": "unknown"}
+
+        # 检查是否使用千问VL OCR
+        if USE_QWEN_VL_OCR:
+            logger.info("使用千问VL进行OCR识别")
+            
+            # 保存临时图片用于千问VL
+            temp_image_path = "temp_ocr_image.png"
+            if len(images) > 0:
+                images[0].save(temp_image_path, quality=95)
+                
+                # 使用千问VL进行OCR
+                result = ocr_with_qwen_vl(temp_image_path)
+                
+                # 清理临时文件
+                if os.path.exists(temp_image_path):
+                    os.remove(temp_image_path)
+                
+                logger.info(f"千问VL OCR完成，标题栏: {len(result.get('title_block', ''))} 字符, 技术要求: {len(result.get('tech_block', ''))} 字符")
+                return result
+            else:
+                logger.error("没有图片可处理")
+                return {
+                    "title_block": "",
+                    "tech_block": "",
+                    "all_text": "",
+                    "layout": "unknown"
+                }
+        else:
+            logger.info("使用PaddleOCR进行识别")
+            # 使用全局 OCR 引擎
+            ocr = get_ocr()
 
         all_text = []
 
@@ -739,11 +763,15 @@ def search_drawings(
         SELECT id, filename, file_type, file_size, upload_time
         FROM drawings
         WHERE filename LIKE ?
-           OR ocr_text LIKE ?
+           OR title_text LIKE ?
+           OR tech_text LIKE ?
+           OR all_text LIKE ?
         ORDER BY upload_time {order_sql}
         LIMIT ? OFFSET ?
         """,
         (
+            f"%{keyword}%",
+            f"%{keyword}%",
             f"%{keyword}%",
             f"%{keyword}%",
             PAGE_SIZE,
@@ -852,7 +880,7 @@ def get_ocr_text(drawing_id: int):
         cursor = conn.cursor()
 
         cursor.execute(
-            "SELECT filename, ocr_text FROM drawings WHERE id=?",
+            "SELECT filename, title_text, tech_text, all_text FROM drawings WHERE id=?",
             (drawing_id,)
         )
 
@@ -867,7 +895,9 @@ def get_ocr_text(drawing_id: int):
 
         return {
             "文件名": row["filename"],
-            "OCR识别内容": row["ocr_text"]
+            "标题栏": row["title_text"] or "",
+            "技术要求": row["tech_text"] or "",
+            "全局OCR": row["all_text"] or ""
         }
 
     finally:
@@ -975,7 +1005,7 @@ def export_ocr(drawing_id: int):
     cursor = conn.cursor()
 
     cursor.execute(
-        "SELECT filename, ocr_text FROM drawings WHERE id=?",
+        "SELECT filename, title_text, tech_text, all_text FROM drawings WHERE id=?",
         (drawing_id,)
     )
 
@@ -987,7 +1017,10 @@ def export_ocr(drawing_id: int):
         raise HTTPException(status_code=404, detail="未找到图纸")
 
     filename = row["filename"]
-    text = row["ocr_text"] or ""
+    title_text = row["title_text"] or ""
+    tech_text = row["tech_text"] or ""
+    all_text = row["all_text"] or ""
+    text = f"标题栏:\n{title_text}\n\n技术要求:\n{tech_text}\n\n全局OCR:\n{all_text}"
 
     export_name = filename + ".txt"
 
@@ -997,3 +1030,622 @@ def export_ocr(drawing_id: int):
             "Content-Disposition": f"attachment; filename={export_name}"
         }
     )
+
+# ==============================
+# DeepSeek API 集成
+# ==============================
+
+# 定义请求体结构
+class ChatRequest(BaseModel):
+    prompt: str
+    # 可选 deepseek-chat 或 deepseek-reasoner
+    model: str = "deepseek-chat"
+
+# 注意：实际开发中请从环境变量读取
+DEEPSEEK_API_KEY = "sk-b30d812092ab409ab787baf82f263e69"
+
+@app.post("/chat")
+def chat(request: ChatRequest):
+    try:
+        # 根据模型选择调用不同的API
+        if "qwen" in request.model.lower():
+            # 调用千问VL API（文本模式）
+            from openai import OpenAI
+            client = OpenAI(
+                api_key=QWEN_API_KEY,
+                base_url=QWEN_BASE_URL
+            )
+            
+            completion = client.chat.completions.create(
+                model=request.model,
+                messages=[{"role": "user", "content": request.prompt}],
+                stream=False
+            )
+            return completion.choices[0].message.content
+        else:
+            # 调用DeepSeek API
+            url = "https://api.deepseek.com/chat/completions"
+            headers = {
+                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            data = {
+                "model": request.model,
+                "messages": [{"role": "user", "content": request.prompt}],
+                "stream": False  # 若需流式输出设为 True
+            }
+
+            response = requests.post(url, headers=headers, json=data)
+            response.raise_for_status()  # 检查HTTP错误
+            result = response.json()
+            return result["choices"][0]["message"]["content"]
+    except Exception as e:
+        logger.error(f"API 调用失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"API 调用失败: {str(e)}")
+
+# ==============================
+# 千问VL API 集成（混合策略）
+# ==============================
+
+import base64
+from io import BytesIO
+from PIL import Image
+
+# 千问API配置 - 阿里云DashScope
+QWEN_API_KEY = "sk-9538f68cbac8442f8a568ba13d6bffc6"  # 千问API密钥
+QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+
+# 千问VL模型选择
+QWEN_VL_MODELS = {
+    "plus": "qwen-vl-plus",      # 性价比最高，主力使用
+    "max": "qwen-vl-max",        # 最高精度，复杂图纸使用
+    "chat": "qwen-vl-chat"       # 轻量级，简单问答使用
+}
+
+class QwenVLRequest(BaseModel):
+    image_path: str
+    prompt: str = "请分析这张图纸，提取标题栏内容、技术要求、图号、比例尺、设计单位等关键信息，并判断是横版还是竖版图纸。"
+    model: str = "plus"  # 可选: plus, max, chat
+
+def encode_image_to_base64(image_path):
+    """将图片编码为base64字符串"""
+    try:
+        with open(image_path, "rb") as image_file:
+            return base64.b64encode(image_file.read()).decode("utf-8")
+    except Exception as e:
+        logger.error(f"图片编码失败: {e}")
+        raise HTTPException(status_code=500, detail=f"图片编码失败: {str(e)}")
+
+def analyze_with_qwen_vl(image_path: str, prompt: str, model_type: str = "plus") -> dict:
+    """
+    使用千问VL分析图纸（支持混合策略）
+    
+    Args:
+        image_path: 图片路径
+        prompt: 分析提示词
+        model_type: 模型类型 (plus/max/chat)
+    
+    Returns:
+        dict: 包含分析结果的字典
+    """
+    try:
+        # 选择模型
+        model_name = QWEN_VL_MODELS.get(model_type, "qwen-vl-plus")
+        logger.info(f"使用千问VL模型: {model_name} 分析图纸: {image_path}")
+        
+        # 编码图片
+        image_base64 = encode_image_to_base64(image_path)
+        
+        # 使用OpenAI SDK调用阿里云DashScope API
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=QWEN_API_KEY,
+            base_url=QWEN_BASE_URL
+        )
+        
+        # 构建消息内容
+        messages = [
+            {
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_base64}"
+                        }
+                    }
+                ]
+            }
+        ]
+        
+        # 调用API
+        completion = client.chat.completions.create(
+            model=model_name,
+            messages=messages,
+            stream=False
+        )
+        
+        # 获取结果
+        analysis_text = completion.choices[0].message.content
+        
+        logger.info(f"千问VL分析完成，结果长度: {len(analysis_text)}")
+        
+        return {
+            "success": True,
+            "model": model_name,
+            "result": analysis_text,
+            "image_path": image_path
+        }
+        
+    except Exception as e:
+        logger.error(f"千问VL分析失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+@app.post("/analyze-drawing")
+def analyze_drawing(request: QwenVLRequest):
+    """
+    使用千问VL分析图纸的API端点
+    
+    支持三种模式:
+    - plus: 性价比最高，适合一般图纸分析
+    - max: 最高精度，适合复杂图纸
+    - chat: 轻量级，适合简单问答
+    """
+    try:
+        # 检查文件是否存在
+        if not os.path.exists(request.image_path):
+            raise HTTPException(status_code=404, detail="图纸文件不存在")
+        
+        # 调用千问VL分析
+        result = analyze_with_qwen_vl(
+            image_path=request.image_path,
+            prompt=request.prompt,
+            model_type=request.model
+        )
+        
+        if result["success"]:
+            return result
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "分析失败"))
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"分析图纸失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"分析图纸失败: {str(e)}")
+
+@app.post("/analyze-drawing-simple")
+def analyze_drawing_simple(
+    image_path: str,
+    question: str = "这张图纸的主要内容是什么？",
+    model: str = "chat"
+):
+    """
+    简单问答模式 - 使用轻量级模型快速回答
+    """
+    try:
+        if not os.path.exists(image_path):
+            raise HTTPException(status_code=404, detail="图纸文件不存在")
+        
+        result = analyze_with_qwen_vl(
+            image_path=image_path,
+            prompt=question,
+            model_type=model
+        )
+        
+        if result["success"]:
+            return {"success": True, "answer": result["result"]}
+        else:
+            raise HTTPException(status_code=500, detail=result.get("error", "分析失败"))
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"简单问答失败: {e}")
+        raise HTTPException(status_code=500, detail=f"简单问答失败: {str(e)}")
+
+# ==============================
+# 千问VL OCR 函数
+# ==============================
+
+def ocr_with_qwen_vl(image_path: str, model_type: str = "plus") -> dict:
+    """
+    使用千问VL进行OCR识别（替代PaddleOCR）
+    
+    Args:
+        image_path: 图片路径
+        model_type: 模型类型 (plus/max/chat)
+    
+    Returns:
+        dict: 包含识别结果的字典
+    """
+    try:
+        logger.info(f"使用千问VL进行OCR识别: {image_path}")
+        
+        # 构建提示词
+        prompt = """请分析这张工程图纸，提取以下信息：
+1. 标题栏内容（包括图号、名称、比例尺等）
+2. 技术要求部分的所有文字
+3. 图纸中的尺寸标注和公差信息
+4. 其他重要的技术信息
+
+请按照以下格式输出：
+【标题栏】
+...
+
+【技术要求】
+...
+
+【尺寸标注】
+...
+
+【其他信息】
+..."""
+        
+        # 调用千问VL分析
+        result = analyze_with_qwen_vl(
+            image_path=image_path,
+            prompt=prompt,
+            model_type=model_type
+        )
+        
+        if result["success"]:
+            # 解析结果
+            analysis_text = result["result"]
+            
+            # 提取不同部分的内容
+            title_text = ""
+            tech_text = ""
+            all_text = analysis_text
+            
+            # 简单的结果解析
+            lines = analysis_text.split('\n')
+            current_section = ""
+            
+            for line in lines:
+                line = line.strip()
+                if "【标题栏】" in line:
+                    current_section = "title"
+                elif "【技术要求】" in line:
+                    current_section = "tech"
+                elif "【尺寸标注】" in line or "【其他信息】" in line:
+                    current_section = "other"
+                elif line:
+                    if current_section == "title":
+                        title_text += line + "\n"
+                    elif current_section == "tech":
+                        tech_text += line + "\n"
+            
+            return {
+                "title_block": title_text.strip(),
+                "tech_block": tech_text.strip(),
+                "all_text": all_text,
+                "layout": "unknown",  # 千问VL会在结果中分析布局
+                "model_used": result["model"]
+            }
+        else:
+            logger.error(f"千问VL OCR失败: {result.get('error', '未知错误')}")
+            return {
+                "title_block": "",
+                "tech_block": "",
+                "all_text": "",
+                "layout": "unknown",
+                "error": result.get('error', '识别失败')
+            }
+            
+    except Exception as e:
+        logger.error(f"千问VL OCR异常: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "title_block": "",
+            "tech_block": "",
+            "all_text": "",
+            "layout": "unknown",
+            "error": str(e)
+        }
+
+# ==============================
+# 启用千问VL OCR模式
+# ==============================
+
+USE_QWEN_VL_OCR = True  # 设置为True使用千问VL，False使用PaddleOCR
+
+# ==============================
+# 千问VL 工具函数
+# ==============================
+
+class QwenToolRequest(BaseModel):
+    tool_call: str
+    parameters: dict
+
+@app.post("/qwen-tool")
+def qwen_tool(request: QwenToolRequest):
+    """
+    千问VL工具调用端点
+    支持的工具：
+    1. 查询数据库 - 查询图纸信息
+    2. OCR分析 - 分析图纸内容
+    3. 搜索图纸 - 搜索图纸信息
+    """
+    try:
+        tool_call = request.tool_call
+        parameters = request.parameters
+        
+        logger.info(f"千问VL工具调用: {tool_call}")
+        logger.info(f"参数: {parameters}")
+        
+        if tool_call == "query_database":
+            # 查询数据库
+            return query_database(parameters)
+        elif tool_call == "analyze_drawing":
+            # 分析图纸
+            return analyze_drawing_tool(parameters)
+        elif tool_call == "search_drawings":
+            # 搜索图纸
+            return search_drawings_tool(parameters)
+        else:
+            return {
+                "success": False,
+                "error": f"未知工具: {tool_call}"
+            }
+            
+    except Exception as e:
+        logger.error(f"千问VL工具调用失败: {e}")
+        import traceback
+        traceback.print_exc()
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def query_database(parameters: dict) -> dict:
+    """
+    查询数据库中的图纸信息
+    
+    参数示例:
+    {
+        "query_type": "list",  # list, detail, count
+        "drawing_id": 1,       # 当query_type为detail时需要
+        "limit": 10,           # 限制返回数量
+        "offset": 0            # 偏移量
+    }
+    """
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        query_type = parameters.get("query_type", "list")
+        
+        if query_type == "list":
+            limit = parameters.get("limit", 10)
+            offset = parameters.get("offset", 0)
+            
+            cursor.execute(
+                "SELECT id, filename, file_type, file_size, upload_time, layout "
+                "FROM drawings ORDER BY upload_time DESC LIMIT ? OFFSET ?",
+                (limit, offset)
+            )
+            rows = cursor.fetchall()
+            
+            drawings = []
+            for row in rows:
+                drawings.append({
+                    "id": row["id"],
+                    "filename": row["filename"],
+                    "file_type": row["file_type"],
+                    "file_size": row["file_size"],
+                    "upload_time": row["upload_time"],
+                    "layout": row["layout"]
+                })
+            
+            return {
+                "success": True,
+                "data": {
+                    "drawings": drawings,
+                    "total": len(drawings)
+                }
+            }
+            
+        elif query_type == "detail":
+            drawing_id = parameters.get("drawing_id")
+            if not drawing_id:
+                return {
+                    "success": False,
+                    "error": "缺少drawing_id参数"
+                }
+            
+            cursor.execute(
+                "SELECT * FROM drawings WHERE id=?",
+                (drawing_id,)
+            )
+            row = cursor.fetchone()
+            
+            if row:
+                return {
+                    "success": True,
+                    "data": {
+                        "id": row["id"],
+                        "filename": row["filename"],
+                        "file_type": row["file_type"],
+                        "file_size": row["file_size"],
+                        "upload_time": row["upload_time"],
+                        "title_text": row["title_text"],
+                        "tech_text": row["tech_text"],
+                        "all_text": row["all_text"],
+                        "layout": row["layout"]
+                    }
+                }
+            else:
+                return {
+                    "success": False,
+                    "error": f"未找到ID为{drawing_id}的图纸"
+                }
+                
+        elif query_type == "count":
+            cursor.execute("SELECT COUNT(*) as count FROM drawings")
+            row = cursor.fetchone()
+            count = row["count"] if row else 0
+            
+            return {
+                "success": True,
+                "data": {
+                    "count": count
+                }
+            }
+            
+        else:
+            return {
+                "success": False,
+                "error": f"未知查询类型: {query_type}"
+            }
+            
+    except Exception as e:
+        logger.error(f"数据库查询失败: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+    finally:
+        if 'conn' in locals():
+            conn.close()
+
+def analyze_drawing_tool(parameters: dict) -> dict:
+    """
+    分析图纸内容
+    
+    参数示例:
+    {
+        "drawing_id": 1,       # 图纸ID
+        "image_path": "path/to/image.png",  # 图片路径
+        "model_type": "plus"   # plus, max, chat
+    }
+    """
+    try:
+        drawing_id = parameters.get("drawing_id")
+        image_path = parameters.get("image_path")
+        model_type = parameters.get("model_type", "plus")
+        
+        if drawing_id:
+            # 通过ID获取图纸信息
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT filename FROM drawings WHERE id=?",
+                (drawing_id,)
+            )
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row:
+                filename = row["filename"]
+                image_path = os.path.join(UPLOAD_DIR, filename)
+                if not os.path.exists(image_path):
+                    return {
+                        "success": False,
+                        "error": f"图纸文件不存在: {image_path}"
+                    }
+            else:
+                return {
+                    "success": False,
+                    "error": f"未找到ID为{drawing_id}的图纸"
+                }
+        
+        if not image_path:
+            return {
+                "success": False,
+                "error": "缺少image_path参数"
+            }
+        
+        if not os.path.exists(image_path):
+            return {
+                "success": False,
+                "error": f"文件不存在: {image_path}"
+            }
+        
+        # 使用千问VL分析图纸
+        result = ocr_with_qwen_vl(image_path, model_type)
+        
+        return {
+            "success": True,
+            "data": result
+        }
+        
+    except Exception as e:
+        logger.error(f"图纸分析失败: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+
+def search_drawings_tool(parameters: dict) -> dict:
+    """
+    搜索图纸
+    
+    参数示例:
+    {
+        "keyword": "钢筋",      # 搜索关键词
+        "limit": 10            # 限制返回数量
+    }
+    """
+    try:
+        keyword = parameters.get("keyword", "")
+        limit = parameters.get("limit", 10)
+        
+        if not keyword:
+            return {
+                "success": False,
+                "error": "缺少keyword参数"
+            }
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        
+        # 搜索标题栏、技术要求和全局OCR内容
+        cursor.execute(
+            "SELECT id, filename, file_type, upload_time, layout "
+            "FROM drawings "
+            "WHERE title_text LIKE ? OR tech_text LIKE ? OR all_text LIKE ? "
+            "ORDER BY upload_time DESC LIMIT ?",
+            (f"%{keyword}%", f"%{keyword}%", f"%{keyword}%", limit)
+        )
+        rows = cursor.fetchall()
+        conn.close()
+        
+        results = []
+        for row in rows:
+            results.append({
+                "id": row["id"],
+                "filename": row["filename"],
+                "file_type": row["file_type"],
+                "upload_time": row["upload_time"],
+                "layout": row["layout"]
+            })
+        
+        return {
+            "success": True,
+            "data": {
+                "results": results,
+                "total": len(results)
+            }
+        }
+        
+    except Exception as e:
+        logger.error(f"图纸搜索失败: {e}")
+        return {
+            "success": False,
+            "error": str(e)
+        }
+    finally:
+        if 'conn' in locals():
+            conn.close()
