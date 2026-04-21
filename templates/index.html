@@ -265,6 +265,23 @@
             box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
             text-decoration: none;
         }
+        
+        /* 下拉菜单样式 */
+        #model-select {
+            padding: 4px 8px;
+            border-radius: 4px;
+            border: 1px solid #fff;
+            background: rgba(255,255,255,0.2);
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+        }
+        
+        #model-select option {
+            background-color: #3498db;
+            color: white;
+            padding: 4px 8px;
+        }
     </style>
 </head>
 <body>
@@ -287,7 +304,7 @@
                     <option value="desc" {% if sort == 'desc' %}selected{% endif %}>时间最新</option>
                     <option value="asc" {% if sort == 'asc' %}selected{% endif %}>时间最早</option>
                 </select>
-                <button type="submit" style="height:35px;font-size:16px;">🔍 搜索</button>
+                <button type="submit" style="height:35px;font-size:16px;line-height:35px;text-align:center;padding:0 20px;background:linear-gradient(135deg,#3498db 0%,#2980b9 100%);color:white;border:none;border-radius:6px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);transition:all 0.3s ease;font-weight:600;">🔍 搜索</button>
             </form>
         </div>
         <br>
@@ -305,6 +322,49 @@
         </div>
         
         <hr>
+        
+        <h3>智能助手</h3>
+        <div class="upload-form" style="margin-bottom: 30px;">
+            <div class="chat-container" style="border: 2px solid #dee2e6; border-radius: 8px; overflow: hidden;">
+                <div class="chat-header" style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; font-weight: 600; font-size: 18px; display: flex; justify-content: space-between; align-items: center;">
+                    <div>智能助手</div>
+                    <div style="display: flex; align-items: center; gap: 10px; font-size: 14px;">
+                        <span>模型:</span>
+                        <select id="model-select">
+                            <option value="qwen">千问VL (推荐)</option>
+                            <option value="deepseek">DeepSeek</option>
+                        </select>
+                    </div>
+                </div>
+                <div id="chat-messages" style="height: 400px; overflow-y: auto; padding: 20px; background-color: #f9f9f9; position: relative;">
+                    <!-- 拖放上传区域 -->
+                    <div id="drop-zone" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; border: 2px dashed #3498db; border-radius: 8px; display: flex; align-items: center; justify-content: center; background-color: rgba(52, 152, 219, 0.1); opacity: 0; pointer-events: none; transition: all 0.3s ease; z-index: 10;">
+                        <div style="text-align: center; color: #3498db; font-size: 18px; font-weight: 600;">
+                            <div style="font-size: 48px; margin-bottom: 10px;">📄</div>
+                            <div>拖放PDF/PNG文件到这里分析</div>
+                        </div>
+                    </div>
+                    
+                    <div class="message bot-message" style="margin-bottom: 15px; max-width: 80%;">
+                        <div style="background-color: #e3f2fd; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
+                            <p style="margin: 0; font-size: 16px; line-height: 1.4;">你好！我是智能助手，有什么我可以帮助你的吗？</p>
+                            <p style="margin: 8px 0 0 0; font-size: 14px; color: #666;">提示：你可以拖放PDF/PNG文件到对话框中进行分析</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="chat-input-container" style="padding: 15px; background-color: white; border-top: 1px solid #dee2e6;">
+                    <div style="display: flex; align-items: center;">
+                        <input type="text" id="chat-input" placeholder="输入你的问题..." style="flex: 1; margin-right: 10px; padding: 12px 16px; border: 2px solid #dee2e6; border-radius: 25px; font-size: 16px;">
+                        <button id="send-btn" style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; border: none; padding: 12px 24px; border-radius: 25px; cursor: pointer; font-size: 16px; font-weight: 600; transition: all 0.3s ease;">
+                            发送
+                        </button>
+                    </div>
+                    <div style="margin-top: 10px; font-size: 14px; color: #666; text-align: center;">
+                        提示：你可以询问关于图纸识别、技术要求解析等问题
+                    </div>
+                </div>
+            </div>
+        </div>
         
         {% if search_keyword %}
         <p>
@@ -326,7 +386,7 @@
                     <tr>
                         <td>{{ d[0] }}</td>
                         <td>
-                            <a href="/uploads/{{ d[1] }}" target="_blank">{{ d[1] }}</a>
+                            <a href="/uploads/{{ d[1] }}" target="_blank" draggable="true" data-filename="{{ d[1] }}" style="cursor: grab;">{{ d[1] }}</a>
                         </td>
                         <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }}</td>
                         <td>{{ d[4] }}</td>
@@ -394,6 +454,299 @@
             {% endif %}
         </table>
         {% endif %}
+        
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {
+                const chatInput = document.getElementById('chat-input');
+                const sendBtn = document.getElementById('send-btn');
+                const chatMessages = document.getElementById('chat-messages');
+                const modelSelect = document.getElementById('model-select');
+                const dropZone = document.getElementById('drop-zone');
+                
+                // 拖放事件处理
+                function setupDropZone() {
+                    const messagesContainer = chatMessages;
+                    
+                    // 拖入时
+                    messagesContainer.addEventListener('dragover', function(e) {
+                        e.preventDefault();
+                        dropZone.style.opacity = '1';
+                        dropZone.style.pointerEvents = 'auto';
+                    });
+                    
+                    // 拖出时
+                    messagesContainer.addEventListener('dragleave', function(e) {
+                        e.preventDefault();
+                        dropZone.style.opacity = '0';
+                        dropZone.style.pointerEvents = 'none';
+                    });
+                    
+                    // 放置时
+                    messagesContainer.addEventListener('drop', function(e) {
+                        e.preventDefault();
+                        dropZone.style.opacity = '0';
+                        dropZone.style.pointerEvents = 'none';
+                        
+                        // 检查是否是从页面内拖动的链接
+                        const draggedElement = document.querySelector('.trae-browser-inspect-draggable');
+                        if (e.dataTransfer.types.includes('text/html')) {
+                            // 尝试获取拖动的文件名
+                            const html = e.dataTransfer.getData('text/html');
+                            const parser = new DOMParser();
+                            const doc = parser.parseFromString(html, 'text/html');
+                            const link = doc.querySelector('a[data-filename]');
+                            
+                            if (link) {
+                                const filename = link.getAttribute('data-filename');
+                                if (filename) {
+                                    // 直接分析已上传的文件
+                                    analyzeDrawing(filename);
+                                    return;
+                                }
+                            }
+                        }
+                        
+                        // 处理从文件系统拖动的文件
+                        const files = e.dataTransfer.files;
+                        handleFileUpload(files);
+                    });
+                }
+                
+                // 处理文件上传
+                function handleFileUpload(files) {
+                    for (let i = 0; i < files.length; i++) {
+                        const file = files[i];
+                        
+                        // 检查文件类型
+                        const ext = file.name.split('.').pop().toLowerCase();
+                        if (ext !== 'pdf' && ext !== 'png') {
+                            addMessage(`不支持的文件类型: ${ext}，请上传PDF或PNG文件`, 'bot');
+                            continue;
+                        }
+                        
+                        addMessage(`正在上传文件: ${file.name}`, 'bot');
+                        
+                        // 创建FormData
+                        const formData = new FormData();
+                        formData.append('files', file);
+                        
+                        // 上传文件
+                        fetch('/上传图纸', {
+                            method: 'POST',
+                            body: formData
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.success) {
+                                addMessage(`文件上传成功: ${file.name}`, 'bot');
+                                
+                                // 分析图纸
+                                analyzeDrawing(file.name);
+                            } else {
+                                addMessage(`文件上传失败: ${data.message || '未知错误'}`, 'bot');
+                            }
+                        })
+                        .catch(error => {
+                            addMessage(`上传文件时出错: ${error.message}`, 'bot');
+                            console.error('上传错误:', error);
+                        });
+                    }
+                }
+                
+                // 分析图纸
+                function analyzeDrawing(filename) {
+                    addMessage('正在分析图纸，请稍候...', 'bot', true);
+                    
+                    // 调用千问VL工具分析图纸
+                    fetch('/qwen-tool', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify({
+                            tool_call: 'analyze_drawing',
+                            parameters: {
+                                image_path: `uploads/${filename}`,
+                                model_type: 'plus'
+                            }
+                        })
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        // 移除加载状态
+                        const loadingMessage = chatMessages.lastElementChild;
+                        if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                            chatMessages.removeChild(loadingMessage);
+                        }
+                        
+                        if (data.success) {
+                            const analysis = data.data;
+                            let analysisText = '';
+                            
+                            if (analysis.title_block) {
+                                analysisText += '【标题栏】\n' + analysis.title_block + '\n\n';
+                            }
+                            if (analysis.tech_block) {
+                                analysisText += '【技术要求】\n' + analysis.tech_block + '\n\n';
+                            }
+                            if (analysis.all_text) {
+                                analysisText += '【完整分析】\n' + analysis.all_text;
+                            }
+                            
+                            addMessage(analysisText, 'bot');
+                        } else {
+                            addMessage(`分析图纸失败: ${data.error || '未知错误'}`, 'bot');
+                        }
+                    })
+                    .catch(error => {
+                        // 移除加载状态
+                        const loadingMessage = chatMessages.lastElementChild;
+                        if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                            chatMessages.removeChild(loadingMessage);
+                        }
+                        addMessage(`分析图纸时出错: ${error.message}`, 'bot');
+                        console.error('分析错误:', error);
+                    });
+                }
+                
+                function sendMessage() {
+                    const message = chatInput.value.trim();
+                    if (!message) return;
+                    
+                    // 获取当前选择的模型
+                    const selectedModel = modelSelect.value;
+                    
+                    // 添加用户消息
+                    addMessage(message, 'user');
+                    chatInput.value = '';
+                    
+                    // 显示加载状态
+                    addMessage('正在思考...', 'bot', true);
+                    
+                    // 根据选择的模型调用不同的API
+                    if (selectedModel === 'qwen') {
+                        // 调用千问VL API（文本模式）
+                        fetch('/chat', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                prompt: message,
+                                model: 'qwen-vl-plus'
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            // 移除加载状态
+                            const loadingMessage = chatMessages.lastElementChild;
+                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                                chatMessages.removeChild(loadingMessage);
+                            }
+                            // 添加AI回复
+                            addMessage(data, 'bot');
+                        })
+                        .catch(error => {
+                            // 移除加载状态
+                            const loadingMessage = chatMessages.lastElementChild;
+                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                                chatMessages.removeChild(loadingMessage);
+                            }
+                            // 添加错误消息
+                            addMessage('抱歉，出现了错误，请稍后再试。', 'bot');
+                            console.error('千问VL Error:', error);
+                        });
+                    } else {
+                        // 调用DeepSeek API
+                        fetch('/chat', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                prompt: message,
+                                model: 'deepseek-chat'
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            // 移除加载状态
+                            const loadingMessage = chatMessages.lastElementChild;
+                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                                chatMessages.removeChild(loadingMessage);
+                            }
+                            // 添加AI回复
+                            addMessage(data, 'bot');
+                        })
+                        .catch(error => {
+                            // 移除加载状态
+                            const loadingMessage = chatMessages.lastElementChild;
+                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                                chatMessages.removeChild(loadingMessage);
+                            }
+                            // 添加错误消息
+                            addMessage('抱歉，出现了错误，请稍后再试。', 'bot');
+                            console.error('DeepSeek Error:', error);
+                        });
+                    }
+                }
+                
+                function addMessage(text, sender, isLoading = false) {
+                    const messageDiv = document.createElement('div');
+                    messageDiv.className = `message ${sender}-message`;
+                    messageDiv.style.marginBottom = '15px';
+                    messageDiv.style.maxWidth = '80%';
+                    
+                    if (sender === 'user') {
+                        messageDiv.style.marginLeft = 'auto';
+                    }
+                    
+                    if (isLoading) {
+                        messageDiv.className += ' loading';
+                    }
+                    
+                    const messageContent = document.createElement('div');
+                    messageContent.style.padding = '12px 16px';
+                    messageContent.style.borderRadius = sender === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px';
+                    messageContent.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
+                    messageContent.style.backgroundColor = sender === 'user' ? '#3498db' : '#e3f2fd';
+                    messageContent.style.color = sender === 'user' ? 'white' : 'black';
+                    
+                    const messageText = document.createElement('p');
+                    messageText.style.margin = '0';
+                    messageText.style.fontSize = '16px';
+                    messageText.style.lineHeight = '1.4';
+                    messageText.textContent = text;
+                    
+                    messageContent.appendChild(messageText);
+                    messageDiv.appendChild(messageContent);
+                    chatMessages.appendChild(messageDiv);
+                    
+                    // 滚动到底部
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
+                
+                // 初始化拖放区域
+                setupDropZone();
+                
+                // 发送按钮点击事件
+                sendBtn.addEventListener('click', sendMessage);
+                
+                // 回车键发送
+                chatInput.addEventListener('keypress', function(e) {
+                    if (e.key === 'Enter') {
+                        sendMessage();
+                    }
+                });
+                
+                // 模型选择变化时的提示
+                modelSelect.addEventListener('change', function() {
+                    const selectedModel = this.value;
+                    const modelName = selectedModel === 'qwen' ? '千问VL' : 'DeepSeek';
+                    addMessage(`已切换到 ${modelName} 模型`, 'bot');
+                });
+            });
+        </script>
     </div>
 </body>
 </html>
