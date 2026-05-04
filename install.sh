@@ -37,19 +37,43 @@ if [[ "$(uname)" == "Darwin" ]]; then
     fi
 
 elif [[ "$(uname)" == "Linux" ]]; then
-    echo "检测到Linux，安装Poppler..."
+    echo "检测到Linux，安装系统依赖..."
 
     if command -v apt-get &> /dev/null; then
         sudo apt-get update -qq
-        sudo apt-get install -y -qq poppler-utils libgl1-mesa-glx libglib2.0-0
+        
+        # Ubuntu 24.04+ 兼容性处理
+        # libgl1-mesa-glx -> libgl1
+        # libglib2.0-0 保持不变
+        # 增加更多必需的系统库
+        
+        DEPS="poppler-utils libglib2.0-0 libsm6 libxrender1 libxext6"
+        
+        if sudo apt-cache show libgl1-mesa-glx &> /dev/null; then
+            DEPS="$DEPS libgl1-mesa-glx"
+        else
+            DEPS="$DEPS libgl1"
+        fi
+        
+        # 检查并添加可能需要的额外依赖
+        for pkg in libgomp1 libopenblas-dev; do
+            if sudo apt-cache show "$pkg" &> /dev/null; then
+                DEPS="$DEPS $pkg"
+            fi
+        done
+        
+        echo "安装依赖: $DEPS"
+        sudo apt-get install -y -qq $DEPS
+        
     elif command -v yum &> /dev/null; then
-        sudo yum install -y poppler-utils mesa-libGL glib2
+        sudo yum install -y poppler-utils mesa-libGL glib2 libSM libXrender libXext libgomp
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y poppler-utils mesa-libGL glib2
+        sudo dnf install -y poppler-utils mesa-libGL glib2 libSM libXrender libXext libgomp
     elif command -v apk &> /dev/null; then
-        sudo apk add poppler-utils glib glibc
+        sudo apk add poppler-utils glib glibc libsm libxrender libxext
     else
-        echo "警告: 无法自动安装系统依赖，请手动安装poppler-utils"
+        echo "警告: 无法自动安装系统依赖，请手动安装以下包:"
+        echo "  poppler-utils, libgl1 (或 libgl1-mesa-glx), libglib2.0-0, libsm6, libxrender1, libxext6"
     fi
 fi
 
