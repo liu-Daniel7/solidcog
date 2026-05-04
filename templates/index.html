@@ -334,6 +334,8 @@
                             <option value="qwen">千问VL (推荐)</option>
                             <option value="deepseek">DeepSeek</option>
                         </select>
+                        <button id="select-drawing-btn" title="选择已有图纸" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 18px; font-weight: bold; transition: all 0.3s ease;">+</button>
+                        <span id="selected-drawing-name" style="color: #90EE90; font-size: 12px; display: none;"></span>
                     </div>
                 </div>
                 <div id="chat-messages" style="height: 400px; overflow-y: auto; padding: 20px; background-color: #f9f9f9; position: relative;">
@@ -366,6 +368,19 @@
             </div>
         </div>
         
+<!-- 图纸选择弹窗 -->
+<div id="drawing-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
+    <div style="background-color: white; border-radius: 12px; width: 90%; max-width: 600px; max-height: 80%; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
+        <div style="padding: 20px; border-bottom: 2px solid #dee2e6; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; border-radius: 12px 12px 0 0;">
+            <h3 style="margin: 0; font-size: 18px;">选择图纸</h3>
+            <button id="close-drawing-modal" style="background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0; line-height: 1;">×</button>
+        </div>
+        <div id="drawing-list" style="padding: 20px; overflow-y: auto; flex: 1;">
+            <div style="text-align: center; padding: 40px; color: #666;">加载中...</div>
+        </div>
+    </div>
+</div>
+
         {% if search_keyword %}
         <p>
             当前搜索关键词：
@@ -456,13 +471,78 @@
         {% endif %}
         
         <script>
+            const pageDrawingList = {{ 图纸列表 | tojson | safe }};
+            
             document.addEventListener('DOMContentLoaded', function() {
                 const chatInput = document.getElementById('chat-input');
                 const sendBtn = document.getElementById('send-btn');
                 const chatMessages = document.getElementById('chat-messages');
                 const modelSelect = document.getElementById('model-select');
                 const dropZone = document.getElementById('drop-zone');
-                
+                const drawingModal = document.getElementById('drawing-modal');
+                const drawingList = document.getElementById('drawing-list');
+                const selectDrawingBtn = document.getElementById('select-drawing-btn');
+                const closeDrawingModal = document.getElementById('close-drawing-modal');
+                const selectedDrawingName = document.getElementById('selected-drawing-name');
+
+                let selectedDrawingId = null;
+
+                function openDrawingModal() {
+                    drawingModal.style.display = 'flex';
+                    loadDrawings();
+                }
+
+                function closeDrawingModalFunc() {
+                    drawingModal.style.display = 'none';
+                }
+
+                function loadDrawings() {
+                    if (pageDrawingList && pageDrawingList.length > 0) {
+                        let html = '<div style="max-height: 400px; overflow-y: auto;">';
+                        pageDrawingList.forEach(function(drawing) {
+                            const drawingId = drawing[5];
+                            const filename = drawing[1];
+                            const fileSizeMB = (drawing[3] / 1024 / 1024).toFixed(2);
+                            const uploadTime = drawing[4];
+                            html += `<div class="drawing-item" data-id="${drawingId}" data-filename="${filename}" style="padding: 15px; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: all 0.3s ease; background: white;">
+                                <div style="display: flex; justify-content: space-between; align-items: center;">
+                                    <div>
+                                        <div style="font-weight: 600; color: #2c3e50; margin-bottom: 5px;">${filename}</div>
+                                        <div style="font-size: 12px; color: #666;">${uploadTime} | ${fileSizeMB} MB</div>
+                                    </div>
+                                    <div style="color: #3498db; font-size: 24px;">→</div>
+                                </div>
+                            </div>`;
+                        });
+                        html += '</div>';
+                        drawingList.innerHTML = html;
+
+                        document.querySelectorAll('.drawing-item').forEach(function(item) {
+                            item.addEventListener('click', function() {
+                                selectDrawing(this.dataset.id, this.dataset.filename);
+                            });
+                        });
+                    } else {
+                        drawingList.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">暂无图纸，请先上传图纸</div>';
+                    }
+                }
+
+                function selectDrawing(drawingId, filename) {
+                    selectedDrawingId = parseInt(drawingId);
+                    selectedDrawingName.textContent = '📄 ' + filename;
+                    selectedDrawingName.style.display = 'inline';
+                    closeDrawingModalFunc();
+                    addMessage(`已选择图纸: ${filename}，请询问关于此图纸的问题`, 'bot');
+                }
+
+                selectDrawingBtn.addEventListener('click', openDrawingModal);
+                closeDrawingModal.addEventListener('click', closeDrawingModalFunc);
+                drawingModal.addEventListener('click', function(e) {
+                    if (e.target === drawingModal) {
+                        closeDrawingModalFunc();
+                    }
+                });
+
                 // 拖放事件处理
                 function setupDropZone() {
                     const messagesContainer = chatMessages;
@@ -612,20 +692,47 @@
                 function sendMessage() {
                     const message = chatInput.value.trim();
                     if (!message) return;
-                    
-                    // 获取当前选择的模型
+
                     const selectedModel = modelSelect.value;
-                    
-                    // 添加用户消息
+
                     addMessage(message, 'user');
                     chatInput.value = '';
-                    
-                    // 显示加载状态
+
                     addMessage('正在思考...', 'bot', true);
-                    
-                    // 根据选择的模型调用不同的API
-                    if (selectedModel === 'qwen') {
-                        // 调用千问VL API（文本模式）
+
+                    if (selectedDrawingId !== null) {
+                        fetch('/chat-with-drawing', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/json'
+                            },
+                            body: JSON.stringify({
+                                prompt: message,
+                                drawing_id: selectedDrawingId,
+                                model: 'qwen-vl-plus'
+                            })
+                        })
+                        .then(response => response.json())
+                        .then(data => {
+                            const loadingMessage = chatMessages.lastElementChild;
+                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                                chatMessages.removeChild(loadingMessage);
+                            }
+                            if (data.success) {
+                                addMessage(data.answer, 'bot');
+                            } else {
+                                addMessage(`分析失败: ${data.detail || '未知错误'}`, 'bot');
+                            }
+                        })
+                        .catch(error => {
+                            const loadingMessage = chatMessages.lastElementChild;
+                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                                chatMessages.removeChild(loadingMessage);
+                            }
+                            addMessage(`抱歉，出现了错误，请稍后再试。`, 'bot');
+                            console.error('Chat with drawing Error:', error);
+                        });
+                    } else if (selectedModel === 'qwen') {
                         fetch('/chat', {
                             method: 'POST',
                             headers: {
@@ -638,21 +745,17 @@
                         })
                         .then(response => response.json())
                         .then(data => {
-                            // 移除加载状态
                             const loadingMessage = chatMessages.lastElementChild;
                             if (loadingMessage && loadingMessage.classList.contains('loading')) {
                                 chatMessages.removeChild(loadingMessage);
                             }
-                            // 添加AI回复
                             addMessage(data, 'bot');
                         })
                         .catch(error => {
-                            // 移除加载状态
                             const loadingMessage = chatMessages.lastElementChild;
                             if (loadingMessage && loadingMessage.classList.contains('loading')) {
                                 chatMessages.removeChild(loadingMessage);
                             }
-                            // 添加错误消息
                             addMessage('抱歉，出现了错误，请稍后再试。', 'bot');
                             console.error('千问VL Error:', error);
                         });
