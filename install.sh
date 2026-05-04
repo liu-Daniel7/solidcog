@@ -42,28 +42,15 @@ elif [[ "$(uname)" == "Linux" ]]; then
     if command -v apt-get &> /dev/null; then
         sudo apt-get update -qq
         
-        # Ubuntu 24.04+ 兼容性处理
-        # libgl1-mesa-glx -> libgl1
-        # libglib2.0-0 保持不变
-        # 增加更多必需的系统库
-        
-        DEPS="poppler-utils libglib2.0-0 libsm6 libxrender1 libxext6"
-        
-        if sudo apt-cache show libgl1-mesa-glx &> /dev/null; then
-            DEPS="$DEPS libgl1-mesa-glx"
-        else
-            DEPS="$DEPS libgl1"
-        fi
-        
-        # 检查并添加可能需要的额外依赖
-        for pkg in libgomp1 libopenblas-dev; do
-            if sudo apt-cache show "$pkg" &> /dev/null; then
-                DEPS="$DEPS $pkg"
-            fi
-        done
+        # Ubuntu 24.04+ 直接使用 libgl1（旧版用 libgl1-mesa-glx）
+        # 统一使用更广泛的依赖列表
+        DEPS="poppler-utils libgl1 libglib2.0-0 libsm6 libxrender1 libxext6"
         
         echo "安装依赖: $DEPS"
-        sudo apt-get install -y -qq $DEPS
+        sudo apt-get install -y -qq $DEPS || {
+            echo "部分依赖安装失败，尝试备用方案..."
+            sudo apt-get install -y -qq poppler-utils libgl1 libsm6 libxrender1 libxext6
+        }
         
     elif command -v yum &> /dev/null; then
         sudo yum install -y poppler-utils mesa-libGL glib2 libSM libXrender libXext libgomp
