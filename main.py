@@ -1044,12 +1044,122 @@ class ChatRequest(BaseModel):
 # 注意：实际开发中请从环境变量读取
 DEEPSEEK_API_KEY = "sk-b30d812092ab409ab787baf82f263e69"
 
+class ChatWithDrawingRequest(BaseModel):
+    prompt: str
+    drawing_id: int
+    model: str = "qwen-vl-plus"
+
+@app.post("/chat-with-drawing")
+def chat_with_drawing(request: ChatWithDrawingRequest):
+    """
+    使用图纸上下文进行聊天
+    1. 获取图纸的OCR信息
+    2. 用千问VL重新分析图纸图片
+    3. 结合OCR和分析结果回答问题
+    """
+    try:
+        drawing_id = request.drawing_id
+        
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT filename, title_text, tech_text, all_text FROM drawings WHERE id=?",
+            (drawing_id,)
+        )
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="未找到该图纸")
+        
+        filename = row["filename"]
+        ocr_title = row["title_text"] or ""
+        ocr_tech = row["tech_text"] or ""
+        ocr_all = row["all_text"] or ""
+        
+        image_path = os.path.join(UPLOAD_DIR, filename)
+        if not os.path.exists(image_path):
+            raise HTTPException(status_code=404, detail="图纸文件不存在")
+        
+        ocr_with_qwen_vl_result = ocr_with_qwen_vl(image_path, "plus")
+        
+        qwen_title = ocr_with_qwen_vl_result.get("title_block", "")
+        qwen_tech = ocr_with_qwen_vl_result.get("tech_block", "")
+        qwen_all = ocr_with_qwen_vl_result.get("all_text", "")
+        
+        context_prompt = f"""你是一个专业的工程图纸技术助手。请根据以下图纸信息回答用户的问题。
+
+【图纸文件名】
+{filename}
+
+【PaddleOCR识别结果】
+【标题栏】
+{ocr_title}
+
+【技术要求】
+{ocr_tech}
+
+【全局OCR】
+{ocr_all}
+
+【千问VL智能分析结果】
+【标题栏分析】
+{qwen_title}
+
+【技术要求分析】
+{qwen_tech}
+
+【完整分析】
+{qwen_all}
+
+【用户问题】
+{request.prompt}
+
+请基于以上图纸信息，专业、准确地回答用户的问题。如果信息不足，请明确指出。"""
+
+        from openai import OpenAI
+        client = OpenAI(
+            api_key=QWEN_API_KEY,
+            base_url=QWEN_BASE_URL
+        )
+        
+        completion = client.chat.completions.create(
+            model=request.model,
+            messages=[{"role": "user", "content": context_prompt}],
+            stream=False
+        )
+        
+        answer = completion.choices[0].message.content
+        
+        return {
+            "success": True,
+            "answer": answer,
+            "drawing_id": drawing_id,
+            "filename": filename,
+            "ocr_info": {
+                "title": ocr_title,
+                "tech": ocr_tech,
+                "all": ocr_all
+            },
+            "qwen_analysis": {
+                "title": qwen_title,
+                "tech": qwen_tech,
+                "all": qwen_all
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"图纸上下文聊天失败: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"聊天失败: {str(e)}")
+
 @app.post("/chat")
 def chat(request: ChatRequest):
     try:
-        # 根据模型选择调用不同的API
         if "qwen" in request.model.lower():
-            # 调用千问VL API（文本模式）
             from openai import OpenAI
             client = OpenAI(
                 api_key=QWEN_API_KEY,
@@ -1063,7 +1173,6 @@ def chat(request: ChatRequest):
             )
             return completion.choices[0].message.content
         else:
-            # 调用DeepSeek API
             url = "https://api.deepseek.com/chat/completions"
             headers = {
                 "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
@@ -1072,11 +1181,11 @@ def chat(request: ChatRequest):
             data = {
                 "model": request.model,
                 "messages": [{"role": "user", "content": request.prompt}],
-                "stream": False  # 若需流式输出设为 True
+                "stream": False
             }
 
             response = requests.post(url, headers=headers, json=data)
-            response.raise_for_status()  # 检查HTTP错误
+            response.raise_for_status()
             result = response.json()
             return result["choices"][0]["message"]["content"]
     except Exception as e:
