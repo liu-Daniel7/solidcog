@@ -1087,7 +1087,20 @@ def chat_with_drawing(request: ChatWithDrawingRequest):
         qwen_tech = ocr_with_qwen_vl_result.get("tech_block", "")
         qwen_all = ocr_with_qwen_vl_result.get("all_text", "")
         
-        context_prompt = f"""你是一个专业的工程图纸技术助手。请根据以下图纸信息回答用户的问题。
+        context_prompt = f"""你是专业的工程图纸OCR识别工具，必须严格遵守以下识别规则：
+
+1. 重点关注并准确识别特殊符号：减号`-`、公差等级字母`K/m`、单位`°`等，不得省略或错认
+2. 材料牌号如Q235、Q355中的字母Q必须识别为大写字母Q，不得错认成O或0
+3. 标准号如GB/T 1800.1中的斜杠`/`必须保留，不得遗漏
+4. 汉字如"按""未""注"这类常用工程词汇，必须完整识别，不得漏字
+
+接下来请分析这张工程图纸，提取以下信息：
+1. 标题栏内容（包括图号、名称、比例尺等）
+2. 技术要求部分的所有文字
+3. 图纸中的尺寸标注和公差信息
+4. 其他重要的技术信息
+
+请按照以下格式输出
 
 【图纸文件名】
 {filename}
@@ -1115,7 +1128,13 @@ def chat_with_drawing(request: ChatWithDrawingRequest):
 【用户问题】
 {request.prompt}
 
-请基于以上图纸信息，专业、准确地回答用户的问题。如果信息不足，请明确指出。"""
+请基于以上图纸信息，专业、准确地回答用户的问题。如果信息不足，请明确指出。
+【强制输出格式要求】
+1. 所有内容必须分段，不同模块之间用空行分隔
+2. 列出多条要点时，使用中文数字加顿号（一、二、三、）或者直接换行，禁止使用`*` `#`这类Markdown符号
+3. 重要参数、关键结论不需要加粗标注，直接用普通文本展示即可
+4. 禁止将所有内容挤在一个段落内，全程不使用任何Markdown格式符号
+"""
 
         from openai import OpenAI
         client = OpenAI(
