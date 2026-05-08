@@ -77,6 +77,7 @@ pip3 install \
     jinja2==3.1.2 \
     pdf2image==1.17.0 \
     pydantic==2.10.6 \
+    openai==1.35.10 \
     -q
 
 echo
