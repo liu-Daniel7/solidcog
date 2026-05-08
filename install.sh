@@ -37,19 +37,30 @@ if [[ "$(uname)" == "Darwin" ]]; then
     fi
 
 elif [[ "$(uname)" == "Linux" ]]; then
-    echo "检测到Linux，安装Poppler..."
+    echo "检测到Linux，安装系统依赖..."
 
     if command -v apt-get &> /dev/null; then
         sudo apt-get update -qq
-        sudo apt-get install -y -qq poppler-utils libgl1-mesa-glx libglib2.0-0
+        
+        # Ubuntu 24.04+ 直接使用 libgl1（旧版用 libgl1-mesa-glx）
+        # 统一使用更广泛的依赖列表
+        DEPS="poppler-utils libgl1 libglib2.0-0 libsm6 libxrender1 libxext6"
+        
+        echo "安装依赖: $DEPS"
+        sudo apt-get install -y -qq $DEPS || {
+            echo "部分依赖安装失败，尝试备用方案..."
+            sudo apt-get install -y -qq poppler-utils libgl1 libsm6 libxrender1 libxext6
+        }
+        
     elif command -v yum &> /dev/null; then
-        sudo yum install -y poppler-utils mesa-libGL glib2
+        sudo yum install -y poppler-utils mesa-libGL glib2 libSM libXrender libXext libgomp
     elif command -v dnf &> /dev/null; then
-        sudo dnf install -y poppler-utils mesa-libGL glib2
+        sudo dnf install -y poppler-utils mesa-libGL glib2 libSM libXrender libXext libgomp
     elif command -v apk &> /dev/null; then
-        sudo apk add poppler-utils glib glibc
+        sudo apk add poppler-utils glib glibc libsm libxrender libxext
     else
-        echo "警告: 无法自动安装系统依赖，请手动安装poppler-utils"
+        echo "警告: 无法自动安装系统依赖，请手动安装以下包:"
+        echo "  poppler-utils, libgl1 (或 libgl1-mesa-glx), libglib2.0-0, libsm6, libxrender1, libxext6"
     fi
 fi
 
@@ -66,6 +77,7 @@ pip3 install \
     jinja2==3.1.2 \
     pdf2image==1.17.0 \
     pydantic==2.10.6 \
+    openai==1.35.10 \
     -q
 
 echo
