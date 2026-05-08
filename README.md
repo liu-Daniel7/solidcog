@@ -49,7 +49,7 @@ uvicorn main:app --reload --host 0.0.0.0 --port 8000
 ### 4. 访问系统
 
 打开浏览器访问：
-- 主页：http://localhost:8000/主页
+- 主页：http://localhost:8000/home
 - API文档：http://localhost:8000/docs
 
 ## 技术栈
