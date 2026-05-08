@@ -602,7 +602,7 @@ def upload_drawing(files: list[UploadFile] = File(...)):
                     conn.close()
 
         # 重定向到主页
-        return RedirectResponse(url="/主页", status_code=303)
+        return RedirectResponse(url="/home", status_code=303)
     except HTTPException:
         raise
     except Exception as e:
@@ -694,7 +694,7 @@ def delete_drawing(drawing_id: int):
         logger.info(f"删除图纸成功: ID={drawing_id}")
 
         # 重定向到主页
-        return RedirectResponse(url="/主页", status_code=303)
+        return RedirectResponse(url="/home", status_code=303)
     except HTTPException:
         raise
     except Exception as e:
@@ -741,7 +741,7 @@ def home(request: Request):
             conn.close()
 
 
-@app.get("/搜索图纸", response_class=HTMLResponse)
+@app.get("/search", response_class=HTMLResponse)
 def search_drawings(
     request: Request,
     keyword: str = "",
@@ -810,24 +810,24 @@ def search_drawings(
     )
 
 # 保留原有中文路由以保持兼容性
-@app.get("/系统状态")
+@app.get("/status")
 def system_status_cn():
     return system_status()
 
-@app.post("/上传图纸")
+@app.post("/upload")
 def upload_drawing_cn(files: list[UploadFile] = File(...)):
     return upload_drawing(files)
 
-@app.get("/图纸列表")
+@app.get("/drawings-list")
 def get_drawings_cn():
     return get_drawings()
 
-@app.get("/删除图纸/{drawing_id}")
+@app.get("/delete-drawing/{drawing_id}")
 def delete_drawing_cn(drawing_id: int):
     return delete_drawing(drawing_id)
 
 
-@app.get("/删除所有图纸")
+@app.get("/delete-all-drawings")
 def delete_all_drawings():
     """删除所有图纸"""
     try:
@@ -857,7 +857,7 @@ def delete_all_drawings():
         logger.info("删除所有图纸成功")
         
         # 重定向到主页
-        return RedirectResponse(url="/主页", status_code=303)
+        return RedirectResponse(url="/home", status_code=303)
     except Exception as e:
         logger.error(f"删除所有图纸失败: {e}")
         raise HTTPException(status_code=500, detail="删除所有图纸失败")
@@ -866,7 +866,7 @@ def delete_all_drawings():
             conn.close()
 
 
-@app.get("/主页", response_class=HTMLResponse)
+@app.get("/home", response_class=HTMLResponse)
 def home_cn(request: Request):
     return home(request)
 
@@ -905,7 +905,7 @@ def get_ocr_text(drawing_id: int):
         conn.close()
 
 
-@app.get("/查看OCR/{drawing_id}", response_class=HTMLResponse)
+@app.get("/view-ocr/{drawing_id}", response_class=HTMLResponse)
 def view_ocr(request: Request, drawing_id: int):
 
     try:
@@ -998,7 +998,7 @@ def view_ocr(request: Request, drawing_id: int):
         )
 
 
-@app.get("/导出OCR/{drawing_id}")
+@app.get("/export-ocr/{drawing_id}")
 def export_ocr(drawing_id: int):
 
     conn = get_db_connection()
