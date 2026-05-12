@@ -292,7 +292,7 @@
         
         <h3>搜索图纸 (OCR)</h3>
         <div class="upload-form">
-            <form action="/搜索图纸" method="get">
+            <form action="/search" method="get">
                 <input
                     type="text"
                     name="keyword"
@@ -406,11 +406,11 @@
                         <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }}</td>
                         <td>{{ d[4] }}</td>
                         <td>
-                            <a href="/删除图纸/{{ d[5] }}" class="delete-btn" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
+                            <a href="/delete-drawing/{{ d[5] }}" class="delete-btn" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
                             |
-                            <a href="/查看OCR/{{ d[5] }}">查看OCR</a>
+                            <a href="/view-ocr/{{ d[5] }}">查看OCR</a>
                             |
-                            <a href="/导出OCR/{{ d[5] }}">导出OCR</a>
+                            <a href="/export-ocr/{{ d[5] }}">导出OCR</a>
                         </td>
                     </tr>
                     {% endfor %}
@@ -421,18 +421,18 @@
                 {% endif %}
             </table>
             <div class="back-link">
-                <a href="/主页">返回图纸列表</a>
+                <a href="/home">返回图纸列表</a>
             </div>
             <div style="margin-top: 20px;">
-                <a href="/搜索图纸?keyword={{ search_keyword }}&page={{ page - 1 }}&sort={{ sort }}">上一页</a>
+                <a href="/search?keyword={{ search_keyword }}&page={{ page - 1 }}&sort={{ sort }}">上一页</a>
                 |
-                <a href="/搜索图纸?keyword={{ search_keyword }}&page={{ page + 1 }}&sort={{ sort }}">下一页</a>
+                <a href="/search?keyword={{ search_keyword }}&page={{ page + 1 }}&sort={{ sort }}">下一页</a>
             </div>
         </div>
         {% else %}
         <h3 style="display: flex; justify-content: space-between; align-items: center;">
             图纸列表
-            <button onclick="if(confirm('确定要删除所有图纸吗？此操作不可恢复！')) { window.location.href = '/删除所有图纸'; }" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;">
+            <button onclick="if(confirm('确定要删除所有图纸吗？此操作不可恢复！')) { window.location.href = '/delete-all-drawings'; }" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;">
                 全部删除
             </button>
         </h3>
@@ -454,11 +454,11 @@
                     <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }}</td>
                     <td>{{ d[4] }}</td>
                     <td>
-                            <a href="/删除图纸/{{ d[5] }}" class="delete-btn" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
+                            <a href="/delete-drawing/{{ d[5] }}" class="delete-btn" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
                             |
-                            <a href="/查看OCR/{{ d[5] }}">查看OCR</a>
+                            <a href="/view-ocr/{{ d[5] }}">查看OCR</a>
                             |
-                            <a href="/导出OCR/{{ d[5] }}">导出OCR</a>
+                            <a href="/export-ocr/{{ d[5] }}">导出OCR</a>
                         </td>
                 </tr>
                 {% endfor %}
@@ -613,16 +613,22 @@
                         // 上传文件
                         fetch('/upload-drawing', {
                             method: 'POST',
+                            headers: {
+                                'Accept': 'application/json'
+                            },
                             body: formData
                         })
-                        .then(response => {
-                            if (response.ok || response.redirected) {
+                        .then(async response => {
+                            const data = await response.json().catch(() => null);
+                            if (response.ok && data && data.success) {
                                 addMessage(`文件上传成功: ${file.name}`, 'bot');
                                 
                                 // 分析图纸
-                                analyzeDrawing(file.name);
+                                const uploadedFile = data.files && data.files[0];
+                                analyzeDrawing(uploadedFile ? uploadedFile.filename : file.name);
                             } else {
-                                addMessage(`文件上传失败: HTTP ${response.status}`, 'bot');
+                                const message = data && (data.detail || data.message || data.error);
+                                addMessage(`文件上传失败: ${message || `HTTP ${response.status}`}`, 'bot');
                             }
                         })
                         .catch(error => {
