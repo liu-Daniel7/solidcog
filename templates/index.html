@@ -311,7 +311,7 @@
 
         <h3>上传图纸（PDF/PNG）</h3>
         <div class="upload-form">
-            <form action="/上传图纸" method="post" enctype="multipart/form-data">
+            <form action="/upload-drawing" method="post" enctype="multipart/form-data">
                 <div class="form-group">
                     <label for="files">选择文件（可多选，支持PDF和PNG格式）：</label>
                     <input type="file" id="files" name="files" accept=".pdf,.png" multiple required>
@@ -611,19 +611,18 @@
                         formData.append('files', file);
                         
                         // 上传文件
-                        fetch('/上传图纸', {
+                        fetch('/upload-drawing', {
                             method: 'POST',
                             body: formData
                         })
-                        .then(response => response.json())
-                        .then(data => {
-                            if (data.success) {
+                        .then(response => {
+                            if (response.ok || response.redirected) {
                                 addMessage(`文件上传成功: ${file.name}`, 'bot');
                                 
                                 // 分析图纸
                                 analyzeDrawing(file.name);
                             } else {
-                                addMessage(`文件上传失败: ${data.message || '未知错误'}`, 'bot');
+                                addMessage(`文件上传失败: HTTP ${response.status}`, 'bot');
                             }
                         })
                         .catch(error => {
