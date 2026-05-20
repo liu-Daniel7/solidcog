@@ -5,7 +5,7 @@ from datetime import datetime
 from typing import Optional
 
 from fastapi import FastAPI, File, UploadFile, Request, HTTPException
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel
@@ -493,7 +493,7 @@ def system_status():
 # ==============================
 
 @app.post("/upload-drawing")
-def upload_drawing(files: list[UploadFile] = File(...)):
+def upload_drawing(request: Request, files: list[UploadFile] = File(...)):
     """上传 PDF 图纸或 PNG 图片（支持批量上传）"""
     try:
         # 检查文件数量
@@ -501,6 +501,8 @@ def upload_drawing(files: list[UploadFile] = File(...)):
             raise HTTPException(status_code=400, detail="请选择至少一个文件")
 
         # 处理每个文件
+        uploaded_files = []
+
         for file in files:
             # 检查文件类型
             ext = os.path.splitext(file.filename)[1].lower()
@@ -596,12 +598,24 @@ def upload_drawing(files: list[UploadFile] = File(...)):
                     )
                 )
                 conn.commit()
+                uploaded_files.append({
+                    "filename": new_filename,
+                    "original_filename": file.filename,
+                    "file_size": file_size
+                })
                 logger.info(f"图纸上传成功: {new_filename}")
             finally:
                 if 'conn' in locals():
                     conn.close()
 
         # 重定向到主页
+        accept_header = request.headers.get("accept", "")
+        if "application/json" in accept_header:
+            return JSONResponse({
+                "success": True,
+                "files": uploaded_files
+            })
+
         return RedirectResponse(url="/home", status_code=303)
     except HTTPException:
         raise
@@ -815,8 +829,8 @@ def system_status_cn():
     return system_status()
 
 @app.post("/upload")
-def upload_drawing_cn(files: list[UploadFile] = File(...)):
-    return upload_drawing(files)
+def upload_drawing_cn(request: Request, files: list[UploadFile] = File(...)):
+    return upload_drawing(request, files)
 
 @app.get("/drawings-list")
 def get_drawings_cn():
@@ -906,6 +920,12 @@ def get_ocr_text(drawing_id: int):
 
 
 @app.get("/view-ocr/{drawing_id}", response_class=HTMLResponse)
+
+
+@app.get("/view-ocr/{drawing_id}", response_class=HTMLResponse)
+def view_ocr_cn(request: Request, drawing_id: int):
+    return view_ocr(request, drawing_id)
+
 def view_ocr(request: Request, drawing_id: int):
 
     try:
