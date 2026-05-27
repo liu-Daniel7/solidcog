@@ -47,6 +47,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+def require_config(name, value):
+    if not value:
+        raise HTTPException(status_code=500, detail=f"Missing required configuration: {name}")
+    return value
+
 # 配置
 UPLOAD_DIR = "uploads"
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
@@ -1061,8 +1066,7 @@ class ChatRequest(BaseModel):
     # 可选 deepseek-chat 或 deepseek-reasoner
     model: str = "deepseek-chat"
 
-# 注意：实际开发中请从环境变量读取
-DEEPSEEK_API_KEY = "sk-b30d812092ab409ab787baf82f263e69"
+DEEPSEEK_API_KEY = os.getenv("DEEPSEEK_API_KEY", "")
 
 class ChatWithDrawingRequest(BaseModel):
     prompt: str
@@ -1139,7 +1143,7 @@ def chat_with_drawing(request: ChatWithDrawingRequest):
 
         from openai import OpenAI
         client = OpenAI(
-            api_key=QWEN_API_KEY,
+            api_key=require_config("QWEN_API_KEY", QWEN_API_KEY),
             base_url=QWEN_BASE_URL
         )
         
@@ -1182,7 +1186,7 @@ def chat(request: ChatRequest):
         if "qwen" in request.model.lower():
             from openai import OpenAI
             client = OpenAI(
-                api_key=QWEN_API_KEY,
+                api_key=require_config("QWEN_API_KEY", QWEN_API_KEY),
                 base_url=QWEN_BASE_URL
             )
             
@@ -1195,7 +1199,7 @@ def chat(request: ChatRequest):
         else:
             url = "https://api.deepseek.com/chat/completions"
             headers = {
-                "Authorization": f"Bearer {DEEPSEEK_API_KEY}",
+                "Authorization": f"Bearer {require_config('DEEPSEEK_API_KEY', DEEPSEEK_API_KEY)}",
                 "Content-Type": "application/json"
             }
             data = {
@@ -1223,8 +1227,8 @@ from io import BytesIO
 from PIL import Image
 
 # 千问API配置 - 阿里云DashScope
-QWEN_API_KEY = "sk-9538f68cbac8442f8a568ba13d6bffc6"  # 千问API密钥
-QWEN_BASE_URL = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+QWEN_API_KEY = os.getenv("QWEN_API_KEY", "")
+QWEN_BASE_URL = os.getenv("QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1")
 
 # 千问VL模型选择
 QWEN_VL_MODELS = {
@@ -1270,7 +1274,7 @@ def analyze_with_qwen_vl(image_path: str, prompt: str, model_type: str = "plus")
         # 使用OpenAI SDK调用阿里云DashScope API
         from openai import OpenAI
         client = OpenAI(
-            api_key=QWEN_API_KEY,
+            api_key=require_config("QWEN_API_KEY", QWEN_API_KEY),
             base_url=QWEN_BASE_URL
         )
         
@@ -1488,7 +1492,7 @@ def ocr_with_qwen_vl(image_path: str, model_type: str = "plus") -> dict:
 # 启用千问VL OCR模式
 # ==============================
 
-USE_QWEN_VL_OCR = True  # 设置为True使用千问VL，False使用PaddleOCR
+USE_QWEN_VL_OCR = os.getenv("USE_QWEN_VL_OCR", "true").lower() in ("1", "true", "yes", "on")
 
 # ==============================
 # 千问VL 工具函数
