@@ -1,6 +1,6 @@
 name: solidcog-py39
 channels:
-  - conda-forge
+  - https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge
 dependencies:
   - python=3.9.13
   - pip

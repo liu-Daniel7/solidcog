@@ -5,6 +5,7 @@ This guide targets Orange Pi boards running Ubuntu 22.04 Jammy on `aarch64`.
 ## Runtime Strategy
 
 - Use Miniforge because it has good `linux-aarch64` support through conda-forge.
+- The installer, conda packages, and pip packages use Tsinghua mirrors for better access from mainland China networks.
 - Create a dedicated conda environment named `solidcog-py39`.
 - Pin Python to `3.9.13`.
 - Use Qwen-VL OCR first by setting `USE_QWEN_VL_OCR=true`.
