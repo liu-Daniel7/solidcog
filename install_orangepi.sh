@@ -4,8 +4,9 @@ set -euo pipefail
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_NAME="solidcog-py39"
 MINIFORGE_DIR="${HOME}/miniforge3"
-INSTALLER_URL="https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-aarch64.sh"
+INSTALLER_URL="https://mirrors.tuna.tsinghua.edu.cn/github-release/conda-forge/miniforge/LatestRelease/Miniforge3-Linux-aarch64.sh"
 INSTALLER_PATH="/tmp/Miniforge3-Linux-aarch64.sh"
+PIP_INDEX_URL="https://pypi.tuna.tsinghua.edu.cn/simple"
 
 cd "${PROJECT_DIR}"
 
@@ -38,11 +39,18 @@ sudo apt-get install -y \
 
 echo "[2/5] Installing Miniforge for aarch64 if needed..."
 if [ ! -x "${MINIFORGE_DIR}/bin/conda" ]; then
-    curl -L "${INSTALLER_URL}" -o "${INSTALLER_PATH}"
+    if [ ! -s "${INSTALLER_PATH}" ]; then
+        curl -L "${INSTALLER_URL}" -o "${INSTALLER_PATH}"
+    fi
     bash "${INSTALLER_PATH}" -b -p "${MINIFORGE_DIR}"
 fi
 
 source "${MINIFORGE_DIR}/etc/profile.d/conda.sh"
+
+echo "Configuring conda to use Tsinghua mirrors..."
+conda config --set show_channel_urls yes
+conda config --remove-key channels >/dev/null 2>&1 || true
+conda config --add channels "https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/conda-forge"
 
 echo "[3/5] Creating or updating conda environment ${ENV_NAME}..."
 if conda env list | awk '{print $1}' | grep -qx "${ENV_NAME}"; then
@@ -52,7 +60,7 @@ else
 fi
 
 echo "[4/5] Installing Python service dependencies..."
-conda run -n "${ENV_NAME}" python -m pip install -r requirements-orangepi.txt
+conda run -n "${ENV_NAME}" python -m pip install -i "${PIP_INDEX_URL}" --trusted-host pypi.tuna.tsinghua.edu.cn -r requirements-orangepi.txt
 
 echo "[5/5] Preparing runtime directories..."
 mkdir -p uploads
