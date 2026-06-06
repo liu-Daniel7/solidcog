@@ -13,7 +13,11 @@ def check_dependencies():
         import fastapi
         import uvicorn
         import pdf2image
-        import pytesseract
+        import requests
+        import jinja2
+        import cv2
+        import numpy
+        import openai
         from PIL import Image
         print("依赖检查通过")
         return True
@@ -28,8 +32,13 @@ def install_dependencies():
         "fastapi",
         "uvicorn",
         "pdf2image",
-        "pytesseract",
-        "Pillow"
+        "requests",
+        "jinja2",
+        "opencv-python",
+        "numpy",
+        "openai",
+        "Pillow",
+        "python-multipart"
     ]
     
     for dep in dependencies:

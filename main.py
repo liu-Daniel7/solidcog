@@ -1,6 +1,7 @@
 import os
 import logging
 import traceback
+import re
 from datetime import datetime
 from typing import Optional
 
@@ -47,16 +48,88 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+def _clean_env_value(value):
+    value = value.strip()
+    if len(value) >= 2 and value[0] == value[-1] and value[0] in ("'", '"'):
+        return value[1:-1]
+    return value
+
+def load_env_file(path):
+    if not os.path.exists(path):
+        return
+
+    try:
+        with open(path, "r", encoding="utf-8-sig") as env_file:
+            for line in env_file:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+
+                key, value = line.split("=", 1)
+                key = key.strip()
+                if not key or key in os.environ:
+                    continue
+
+                os.environ[key] = _clean_env_value(value)
+    except Exception as exc:
+        logger.warning("Failed to load .env file: %s", exc)
+
+load_env_file(os.path.join(BASE_DIR, ".env"))
+
+CONFIG_PLACEHOLDERS = {
+    "replace-with-your-qwen-api-key",
+    "replace-with-your-deepseek-api-key",
+    "your-qwen-api-key",
+    "your-deepseek-api-key",
+}
+
 def require_config(name, value):
-    if not value:
+    if not value or value.strip().lower() in CONFIG_PLACEHOLDERS:
         raise HTTPException(status_code=500, detail=f"Missing required configuration: {name}")
     return value
+
+def get_configured_ocr_backend():
+    """
+    Resolve OCR backend while preserving the old USE_QWEN_VL_OCR switch.
+    Explicit OCR_BACKEND always wins.
+    """
+    raw_backend = os.getenv("OCR_BACKEND", "").strip().lower()
+    if raw_backend:
+        return OCR_BACKEND_ALIASES.get(raw_backend, raw_backend)
+
+    return "qwen_vl" if USE_QWEN_VL_OCR else "paddle"
+
+def unavailable_ocr_backend_result(backend, detail):
+    return {
+        "title_block": detail,
+        "tech_block": "",
+        "all_text": "",
+        "layout": "unknown",
+        "backend": backend,
+        "error": detail
+    }
 
 # 配置
 UPLOAD_DIR = "uploads"
 MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 DATABASE_PATH = os.path.join(BASE_DIR, "database.db")
+USE_QWEN_VL_OCR = os.getenv("USE_QWEN_VL_OCR", "true").lower() in ("1", "true", "yes", "on")
+SUPPORTED_OCR_BACKENDS = {"qwen_vl", "paddle", "ascend_cann", "mindx"}
+OCR_BACKEND_ALIASES = {
+    "qwen": "qwen_vl",
+    "qwen-vl": "qwen_vl",
+    "qwen_vl": "qwen_vl",
+    "paddle": "paddle",
+    "paddleocr": "paddle",
+    "paddle_ocr": "paddle",
+    "ascend": "ascend_cann",
+    "ascend-cann": "ascend_cann",
+    "ascend_cann": "ascend_cann",
+    "cann": "ascend_cann",
+    "mindx": "mindx",
+}
 
 app = FastAPI(title="工程数字图纸智能管理系统")
 
@@ -251,6 +324,40 @@ def extract_text(result):
                 texts.append(text)
     return "\n".join(texts)
 
+def run_ascend_cann_ocr(file_path, images):
+    """
+    Placeholder for Atlas/CANN OCR inference.
+    Real NPU inference should load OM models from ASCEND_MODEL_DIR and return
+    the same OCR result schema used by Qwen-VL and PaddleOCR.
+    """
+    device_id = os.getenv("ASCEND_DEVICE_ID", "0")
+    model_dir = os.getenv("ASCEND_MODEL_DIR", "models/ascend")
+    detail = (
+        "OCR_BACKEND=ascend_cann 已启用，但当前仓库尚未接入 Atlas/CANN OM 模型推理。"
+        f"请先在 {model_dir} 放置文字检测/识别 .om 模型，并实现 CANN 推理后端。"
+    )
+    logger.warning(
+        "Ascend CANN OCR backend is not implemented yet. "
+        f"file={file_path}, pages={len(images)}, device_id={device_id}, model_dir={model_dir}"
+    )
+    return unavailable_ocr_backend_result("ascend_cann", detail)
+
+def run_mindx_ocr(file_path, images):
+    """
+    Placeholder for MindX Pipeline OCR inference.
+    A future implementation should POST the prepared image to MINDX_PIPELINE_URL.
+    """
+    pipeline_url = os.getenv("MINDX_PIPELINE_URL", "")
+    detail = (
+        "OCR_BACKEND=mindx 已启用，但当前仓库尚未接入 MindX Pipeline 推理服务。"
+        "请先配置 MINDX_PIPELINE_URL 并实现 MindX 调用逻辑。"
+    )
+    logger.warning(
+        "MindX OCR backend is not implemented yet. "
+        f"file={file_path}, pages={len(images)}, pipeline_url={pipeline_url or 'unset'}"
+    )
+    return unavailable_ocr_backend_result("mindx", detail)
+
 # ==============================
 # OCR 识别函数
 # ==============================
@@ -280,8 +387,24 @@ def run_ocr(file_path):
             logger.error(f"不支持的文件类型: {ext}")
             return {"text": "不支持的文件类型", "layout": "unknown"}
 
-        # 检查是否使用千问VL OCR
-        if USE_QWEN_VL_OCR:
+        backend = get_configured_ocr_backend()
+        logger.info(f"使用 OCR 后端: {backend}")
+
+        if backend not in SUPPORTED_OCR_BACKENDS:
+            detail = (
+                f"不支持的 OCR_BACKEND: {backend}。"
+                f"支持的后端: {', '.join(sorted(SUPPORTED_OCR_BACKENDS))}"
+            )
+            logger.error(detail)
+            return unavailable_ocr_backend_result(backend, detail)
+
+        if backend == "ascend_cann":
+            return run_ascend_cann_ocr(file_path, images)
+
+        if backend == "mindx":
+            return run_mindx_ocr(file_path, images)
+
+        if backend == "qwen_vl":
             logger.info("使用千问VL进行OCR识别")
             
             # 保存临时图片用于千问VL
@@ -291,6 +414,7 @@ def run_ocr(file_path):
                 
                 # 使用千问VL进行OCR
                 result = ocr_with_qwen_vl(temp_image_path)
+                result["backend"] = backend
                 
                 # 清理临时文件
                 if os.path.exists(temp_image_path):
@@ -304,12 +428,13 @@ def run_ocr(file_path):
                     "title_block": "",
                     "tech_block": "",
                     "all_text": "",
-                    "layout": "unknown"
+                    "layout": "unknown",
+                    "backend": backend
                 }
-        else:
-            logger.info("使用PaddleOCR进行识别")
-            # 使用全局 OCR 引擎
-            ocr = get_ocr()
+
+        logger.info("使用PaddleOCR进行识别")
+        # 使用全局 OCR 引擎
+        ocr = get_ocr()
 
         all_text = []
 
@@ -415,7 +540,8 @@ def run_ocr(file_path):
             "title_block": final_title,
             "tech_block": final_tech,
             "all_text": final_all,
-            "layout": layout
+            "layout": layout,
+            "backend": backend
         }
 
     except Exception as e:
@@ -602,8 +728,10 @@ def upload_drawing(request: Request, files: list[UploadFile] = File(...)):
                         layout
                     )
                 )
+                drawing_id = cursor.lastrowid
                 conn.commit()
                 uploaded_files.append({
+                    "id": drawing_id,
                     "filename": new_filename,
                     "original_filename": file.filename,
                     "file_size": file_size
@@ -749,7 +877,8 @@ def home(request: Request):
             "index.html",
             {
                 "request": request,
-                "图纸列表": 图纸列表
+                "图纸列表": 图纸列表,
+                "drawings": 图纸列表
             }
         )
     except Exception as e:
@@ -822,6 +951,7 @@ def search_drawings(
         {
             "request": request,
             "图纸列表": 图纸列表,
+            "drawings": 图纸列表,
             "search_keyword": keyword,
             "page": page,
             "sort": sort
@@ -1073,6 +1203,117 @@ class ChatWithDrawingRequest(BaseModel):
     drawing_id: int
     model: str = "qwen-vl-plus"
 
+
+DRAWING_ASSISTANT_REFERENCE = """1、图纸知识库智能管理：面向非标产线及车间集成商，AI可对历史图纸进行深度语义解析与特征提取，实现图纸名称、技术要求、图形结构等多维度信息的智能匹配。通过构建可学习的知识图谱，系统能够精准推荐相似设计案例与可复用模块，大幅减少重复绘图工作，同时为工程师提供最优参考依据，使知识沉淀真正转化为设计效率的提升。
+
+2、图纸智能审图：AI审图系统可自动依据《机械设计手册》、工程图制图国标及行标，对图纸进行合规性检查；同时支持嵌入企业自定义的审核规则（如特定材料库、工艺规范等）。审核覆盖尺寸标注的完整性、材料选型的合理性、表面处理与热处理的工艺适配性，以及尺寸链的闭环校核，精准识别潜在设计缺陷并给出修改建议，显著降低人工错漏率，保障非标设计的质量一致性。"""
+
+
+DRAWING_ASSISTANT_SYSTEM_PROMPT = """你是 SolidCog 的受限工程图纸智能助手，服务对象是非标产线及车间集成商的工程师。
+
+必须严格遵守以下规则：
+1. 只回答用户当前提出的问题，不主动扩展到用户没有问的主题。
+2. 回答依据只能来自三类内容：用户问题、当前图纸内容、系统提供的参考内容。
+3. 如果图纸内容或参考内容不足以支持结论，必须明确说明“当前依据不足”，不能猜测、编造图号、材料、尺寸、工艺、标准条款或审查结论。
+4. 当用户要求图纸知识库智能管理时，重点围绕图纸名称、技术要求、图形结构、相似案例、可复用模块和知识沉淀回答。
+5. 当用户要求智能审图时，重点围绕合规性、尺寸标注完整性、材料选型、表面处理、热处理、工艺适配性、尺寸链闭环和修改建议回答。
+6. 不能声称已经检查了未提供的企业私有规则、完整标准原文或外部知识库；只能说“可按该规则方向检查”或“需要补充规则后检查”。
+7. 默认简要回答，除非用户明确要求“详细分析、完整报告、逐项展开”，否则不要写长篇报告。
+8. 默认输出控制在 120-180 字；最多 5 条要点；每条只保留“结论/问题 + 依据 + 建议”，不要展开背景说明。
+9. 智能审图默认只列最重要的 3-5 个风险或改进项，并给出简短处理建议；没有问题时直接说“当前未发现明显问题”，再列必要补充项。
+10. 不要使用过多 Markdown 标题。默认格式为：一句总评 + 3-5 条编号要点 + 一句需要补充的信息。
+11. 禁止使用 Markdown 装饰符，包括星号、井号、表格、分隔线、引用块和代码块；不要输出 **加粗**、### 标题或 --- 分隔线。
+12. 使用纯文本回答。允许使用“1.”、“2.”这样的普通编号，但编号后直接写内容，不要加粗小标题。
+13. 输出要专业、可执行、结论清晰。每条关键结论尽量标明来自图纸内容、参考内容，或说明依据不足。
+"""
+
+
+def build_drawing_context_messages(
+    *,
+    filename: str,
+    ocr_title: str,
+    ocr_tech: str,
+    ocr_all: str,
+    qwen_title: str,
+    qwen_tech: str,
+    qwen_all: str,
+    user_prompt: str
+):
+    user_content = f"""【用户问题】
+{user_prompt}
+
+【当前图纸文件名】
+{filename}
+
+【当前图纸已入库 OCR 内容】
+标题栏：
+{ocr_title}
+
+技术要求：
+{ocr_tech}
+
+全局 OCR：
+{ocr_all}
+
+【当前图纸 Qwen VL 视觉解析内容】
+标题栏分析：
+{qwen_title}
+
+技术要求分析：
+{qwen_tech}
+
+完整视觉分析：
+{qwen_all}
+
+【系统参考内容】
+{DRAWING_ASSISTANT_REFERENCE}
+
+请严格基于“用户问题 + 当前图纸内容 + 系统参考内容”回答。默认简要回答，最多 5 条要点；只用纯文本普通编号，禁止星号、加粗、标题和分隔线；若依据不足，直接指出不足并说明还需要补充哪些图纸信息或审核规则。"""
+
+    return [
+        {"role": "system", "content": DRAWING_ASSISTANT_SYSTEM_PROMPT},
+        {"role": "user", "content": user_content}
+    ]
+
+
+def sanitize_assistant_answer(answer: str) -> str:
+    """Remove markdown decoration from model output before it reaches the UI."""
+    if not answer:
+        return ""
+
+    text = str(answer)
+
+    # Remove fenced code markers and markdown separators.
+    text = re.sub(r"```+", "", text)
+    text = re.sub(r"(?m)^\s*[-*_]{3,}\s*$", "", text)
+
+    cleaned_lines = []
+    for raw_line in text.splitlines():
+        line = raw_line.strip()
+        if not line:
+            cleaned_lines.append("")
+            continue
+
+        # Strip markdown heading, quote, and list decoration.
+        line = re.sub(r"^\s{0,3}#{1,6}\s*", "", line)
+        line = re.sub(r"^\s*>\s*", "", line)
+        line = re.sub(r"^\s*[-+*]\s+", "", line)
+
+        # Convert "**标题**：内容" and similar variants to plain text.
+        line = line.replace("**", "")
+        line = line.replace("__", "")
+        line = line.replace("*", "")
+        line = line.replace("#", "")
+        line = line.replace("`", "")
+        line = line.replace("|", " ")
+
+        cleaned_lines.append(line.strip())
+
+    text = "\n".join(cleaned_lines)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    return text.strip()
+
+
 @app.post("/chat-with-drawing")
 def chat_with_drawing(request: ChatWithDrawingRequest):
     """
@@ -1111,35 +1352,16 @@ def chat_with_drawing(request: ChatWithDrawingRequest):
         qwen_tech = ocr_with_qwen_vl_result.get("tech_block", "")
         qwen_all = ocr_with_qwen_vl_result.get("all_text", "")
         
-        context_prompt = f"""你是一个专业的工程图纸技术助手。请根据以下图纸信息回答用户的问题。
-
-【图纸文件名】
-{filename}
-
-【PaddleOCR识别结果】
-【标题栏】
-{ocr_title}
-
-【技术要求】
-{ocr_tech}
-
-【全局OCR】
-{ocr_all}
-
-【千问VL智能分析结果】
-【标题栏分析】
-{qwen_title}
-
-【技术要求分析】
-{qwen_tech}
-
-【完整分析】
-{qwen_all}
-
-【用户问题】
-{request.prompt}
-
-请基于以上图纸信息，专业、准确地回答用户的问题。如果信息不足，请明确指出。"""
+        messages = build_drawing_context_messages(
+            filename=filename,
+            ocr_title=ocr_title,
+            ocr_tech=ocr_tech,
+            ocr_all=ocr_all,
+            qwen_title=qwen_title,
+            qwen_tech=qwen_tech,
+            qwen_all=qwen_all,
+            user_prompt=request.prompt
+        )
 
         from openai import OpenAI
         client = OpenAI(
@@ -1149,11 +1371,11 @@ def chat_with_drawing(request: ChatWithDrawingRequest):
         
         completion = client.chat.completions.create(
             model=request.model,
-            messages=[{"role": "user", "content": context_prompt}],
+            messages=messages,
             stream=False
         )
         
-        answer = completion.choices[0].message.content
+        answer = sanitize_assistant_answer(completion.choices[0].message.content)
         
         return {
             "success": True,
@@ -1195,7 +1417,7 @@ def chat(request: ChatRequest):
                 messages=[{"role": "user", "content": request.prompt}],
                 stream=False
             )
-            return completion.choices[0].message.content
+            return sanitize_assistant_answer(completion.choices[0].message.content)
         else:
             url = "https://api.deepseek.com/chat/completions"
             headers = {
@@ -1211,7 +1433,7 @@ def chat(request: ChatRequest):
             response = requests.post(url, headers=headers, json=data)
             response.raise_for_status()
             result = response.json()
-            return result["choices"][0]["message"]["content"]
+            return sanitize_assistant_answer(result["choices"][0]["message"]["content"])
     except Exception as e:
         logger.error(f"API 调用失败: {e}")
         import traceback
@@ -1377,7 +1599,7 @@ def analyze_drawing_simple(
         )
         
         if result["success"]:
-            return {"success": True, "answer": result["result"]}
+            return {"success": True, "answer": sanitize_assistant_answer(result["result"])}
         else:
             raise HTTPException(status_code=500, detail=result.get("error", "分析失败"))
             
@@ -1487,12 +1709,6 @@ def ocr_with_qwen_vl(image_path: str, model_type: str = "plus") -> dict:
             "layout": "unknown",
             "error": str(e)
         }
-
-# ==============================
-# 启用千问VL OCR模式
-# ==============================
-
-USE_QWEN_VL_OCR = os.getenv("USE_QWEN_VL_OCR", "true").lower() in ("1", "true", "yes", "on")
 
 # ==============================
 # 千问VL 工具函数
