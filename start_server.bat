@@ -15,10 +15,10 @@ if %errorlevel% neq 0 (
 
 REM 检查依赖是否安装
 echo 检查依赖...
-pip list | findstr "fastapi uvicorn pdf2image pytesseract Pillow" >nul 2>&1
+python -c "import fastapi, uvicorn, pdf2image, requests, jinja2, cv2, numpy, openai; from PIL import Image" >nul 2>&1
 if %errorlevel% neq 0 (
     echo 安装依赖...
-    pip install fastapi uvicorn pdf2image pytesseract Pillow
+    pip install fastapi uvicorn pdf2image requests jinja2 opencv-python numpy openai Pillow python-multipart
     if %errorlevel% neq 0 (
         echo 依赖安装失败
         pause
