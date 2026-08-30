@@ -1,0 +1,12 @@
+SolidCog
+Copyright 2026 liu-Daniel7
+
+SolidCog uses MechVL-4B-RL for local mechanical drawing question answering.
+MechVL-4B-RL is developed by its original authors and is distributed under
+the Apache License 2.0. SolidCog does not include or relicense its model
+weights. The installation script downloads them from the original repository:
+
+https://huggingface.co/XiaofengAlg/MechVL-4B-RL
+
+MechVL-4B-RL is based on Qwen3-VL-4B-Instruct. Third-party models, APIs, and
+dependencies remain subject to their respective licenses and service terms.
