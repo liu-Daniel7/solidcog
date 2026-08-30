@@ -3,858 +3,1631 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>工程数字图纸管理系统</title>
+    <title>SolidCog 工程图纸智能工作台</title>
     <style>
+        :root {
+            --bg: oklch(1 0 0);
+            --surface: oklch(0.982 0.003 180);
+            --surface-raised: oklch(0.998 0 0);
+            --surface-tint: oklch(0.955 0.018 180);
+            --ink: oklch(0.205 0.018 230);
+            --muted: oklch(0.465 0.018 230);
+            --subtle: oklch(0.675 0.012 230);
+            --line: oklch(0.895 0.012 230);
+            --line-strong: oklch(0.78 0.02 230);
+            --primary: oklch(0.46 0.095 180);
+            --primary-hover: oklch(0.39 0.095 180);
+            --primary-soft: oklch(0.92 0.045 180);
+            --accent: oklch(0.62 0.13 58);
+            --accent-soft: oklch(0.94 0.05 58);
+            --danger: oklch(0.56 0.18 28);
+            --danger-soft: oklch(0.95 0.045 28);
+            --success: oklch(0.58 0.12 145);
+            --info: oklch(0.56 0.12 245);
+            --nav: oklch(0.14 0.018 230);
+            --nav-raised: oklch(0.19 0.024 230);
+            --nav-muted: oklch(0.77 0.018 230);
+            --focus: oklch(0.70 0.13 180);
+            --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.08);
+            --shadow-md: 0 8px 18px oklch(0 0 0 / 0.10);
+            --radius-sm: 6px;
+            --radius: 10px;
+            --radius-lg: 14px;
+            --topbar: 68px;
+        }
+
         * {
-            margin: 0;
-            padding: 0;
             box-sizing: border-box;
         }
-        
+
+        html {
+            min-width: 320px;
+            background: var(--bg);
+        }
+
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            line-height: 1.6;
-            color: #333;
-            background-color: #f5f5f5;
-            padding: 20px;
+            margin: 0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: var(--ink);
+            background: var(--surface);
+            font-size: 15px;
+            line-height: 1.5;
         }
-        
-        .container {
-            max-width: 1000px;
+
+        a {
+            color: var(--primary);
+            text-decoration: none;
+        }
+
+        a:hover {
+            color: var(--primary-hover);
+            text-decoration: underline;
+        }
+
+        button,
+        input,
+        select {
+            font: inherit;
+        }
+
+        button,
+        a,
+        input,
+        select {
+            outline: none;
+        }
+
+        :focus-visible {
+            box-shadow: 0 0 0 3px color-mix(in oklch, var(--focus) 45%, transparent);
+            outline: 2px solid transparent;
+        }
+
+        .app {
+            min-height: 100vh;
+        }
+
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            height: var(--topbar);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 24px;
+            padding: 0 clamp(18px, 4vw, 44px);
+            background: var(--nav);
+            color: var(--bg);
+            border-bottom: 1px solid oklch(1 0 0 / 0.08);
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            min-width: 0;
+        }
+
+        .brand-mark {
+            width: 34px;
+            height: 34px;
+            border-radius: 8px;
+            display: grid;
+            place-items: center;
+            background: var(--primary);
+            color: var(--bg);
+            font-weight: 800;
+            letter-spacing: 0;
+        }
+
+        .brand-title {
+            display: flex;
+            flex-direction: column;
+            min-width: 0;
+        }
+
+        .brand-title strong {
+            font-size: 16px;
+            line-height: 1.1;
+            white-space: nowrap;
+        }
+
+        .brand-title span {
+            margin-top: 3px;
+            color: var(--nav-muted);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .topbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .status-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 7px;
+            height: 32px;
+            padding: 0 11px;
+            border: 1px solid oklch(1 0 0 / 0.12);
+            border-radius: 999px;
+            background: var(--nav-raised);
+            color: var(--nav-muted);
+            font-size: 12px;
+            white-space: nowrap;
+        }
+
+        .status-dot {
+            width: 7px;
+            height: 7px;
+            border-radius: 999px;
+            background: var(--success);
+        }
+
+        .workspace {
+            width: min(1440px, 100%);
             margin: 0 auto;
-            background-color: #fff;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-            padding: 30px;
+            padding: 28px clamp(16px, 4vw, 44px) 56px;
         }
-        
-        h2 {
-            color: #2c3e50;
-            margin-bottom: 30px;
-            text-align: center;
-            padding-bottom: 15px;
-            border-bottom: 3px solid #3498db;
-            font-size: 28px;
-            font-weight: 700;
-            text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.1);
-            letter-spacing: 2px;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+        .overview {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 22px;
+            align-items: end;
+            margin-bottom: 22px;
         }
-        
-        h3 {
-            color: #2c3e50;
-            margin: 25px 0 20px;
+
+        .overview h1 {
+            margin: 0;
+            color: var(--ink);
+            font-size: 30px;
+            line-height: 1.15;
+            letter-spacing: 0;
+            text-wrap: balance;
+        }
+
+        .overview p {
+            max-width: 68ch;
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 15px;
+        }
+
+        .metric-strip {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(118px, 1fr));
+            gap: 10px;
+            min-width: min(440px, 100%);
+        }
+
+        .metric {
+            padding: 13px 14px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface-raised);
+        }
+
+        .metric b {
+            display: block;
             font-size: 20px;
-            font-weight: 600;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.1);
-            letter-spacing: 1px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 12px 15px;
-            border-radius: 6px;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-            border-left: 4px solid #3498db;
+            line-height: 1.1;
         }
-        
-        hr {
-            border: 0;
-            border-top: 2px solid #e0e0e0;
-            margin: 25px 0;
-            border-radius: 1px;
-        }
-        
-        .upload-form {
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            padding: 25px;
-            border-radius: 8px;
-            margin-bottom: 25px;
-            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
-            border: 1px solid #dee2e6;
-        }
-        
-        .form-group {
-            margin-bottom: 20px;
-        }
-        
-        .form-group label {
+
+        .metric span {
             display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #2c3e50;
+            margin-top: 5px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .workbench {
+            display: grid;
+            grid-template-columns: minmax(320px, 0.92fr) minmax(420px, 1.25fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .panel {
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+            background: var(--surface-raised);
+            box-shadow: var(--shadow-sm);
+            overflow: hidden;
+        }
+
+        .panel + .panel {
+            margin-top: 18px;
+        }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 16px;
+            padding: 17px 18px 14px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .panel-title {
+            min-width: 0;
+        }
+
+        .panel-title h2,
+        .panel-title h3 {
+            margin: 0;
+            color: var(--ink);
             font-size: 16px;
+            line-height: 1.25;
         }
-        
-        input[type="text"] {
-            display: block;
-            margin-bottom: 15px;
-            padding: 16px 20px;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
+
+        .panel-title p {
+            margin: 5px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .panel-body {
+            padding: 18px;
+        }
+
+        .stack {
+            display: grid;
+            grid-template-rows: auto minmax(0, 1fr);
+            gap: 18px;
+            min-height: 650px;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto auto;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .field {
             width: 100%;
-            background-color: white;
-            font-size: 18px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-weight: 400;
-            color: #333;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+            min-height: 42px;
+            padding: 9px 12px;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius-sm);
+            background: var(--bg);
+            color: var(--ink);
+            transition: border-color 180ms ease, box-shadow 180ms ease, background-color 180ms ease;
         }
-        
-        input[type="text"]:focus {
-            outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
-            transform: translateY(-1px);
+
+        .field::placeholder {
+            color: var(--muted);
         }
-        
-        input[type="file"] {
-            display: block;
-            margin-bottom: 15px;
-            padding: 16px 20px;
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            width: 100%;
-            background-color: white;
-            font-size: 18px;
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            font-weight: 400;
-            color: #333;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+
+        .field:hover {
+            border-color: var(--primary);
         }
-        
-        input[type="file"]:focus {
-            outline: none;
-            border-color: #3498db;
-            box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.2);
-            transform: translateY(-1px);
+
+        .select {
+            min-width: 128px;
         }
-        
-        button[type="submit"] {
-            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-            color: white;
-            border: none;
-            padding: 12px 25px;
-            border-radius: 6px;
+
+        .button {
+            min-height: 42px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            border: 1px solid transparent;
+            border-radius: var(--radius-sm);
+            padding: 0 14px;
+            background: var(--surface-raised);
+            color: var(--ink);
             cursor: pointer;
-            font-size: 16px;
-            font-weight: 600;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            font-weight: 650;
+            white-space: nowrap;
+            transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
         }
-        
-        button[type="submit"]:hover {
-            background: linear-gradient(135deg, #2980b9 0%, #1f618d 100%);
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
-            transform: translateY(-2px);
+
+        .button:hover {
+            transform: translateY(-1px);
         }
-        
+
+        .button-primary {
+            background: var(--primary);
+            color: var(--bg);
+        }
+
+        .button-primary:hover {
+            background: var(--primary-hover);
+            color: var(--bg);
+            text-decoration: none;
+        }
+
+        .button-secondary {
+            border-color: var(--line-strong);
+            background: var(--bg);
+        }
+
+        .button-secondary:hover {
+            border-color: var(--primary);
+            color: var(--primary-hover);
+            text-decoration: none;
+        }
+
+        .button-danger {
+            background: var(--danger);
+            color: var(--bg);
+        }
+
+        .button-danger:hover {
+            background: oklch(0.48 0.18 28);
+            color: var(--bg);
+            text-decoration: none;
+        }
+
+        .button:disabled,
+        .button[aria-disabled="true"] {
+            border-color: var(--line);
+            background: var(--surface);
+            color: var(--subtle);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .upload-zone {
+            border: 1px dashed var(--line-strong);
+            border-radius: var(--radius);
+            background: var(--surface);
+            padding: 18px;
+        }
+
+        .upload-zone label {
+            display: block;
+            margin-bottom: 9px;
+            font-weight: 700;
+            color: var(--ink);
+        }
+
+        .upload-help {
+            margin: 10px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .chat-panel {
+            display: flex;
+            min-height: 0;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-toolbar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+            justify-content: flex-end;
+        }
+
+        .chat-panel .panel-header {
+            flex: 0 0 auto;
+            align-items: center;
+            padding-top: 12px;
+            padding-bottom: 11px;
+        }
+
+        .chat-panel .panel-title {
+            flex: 1 1 auto;
+            min-width: 340px;
+        }
+
+        .assistant-subtitle {
+            margin-top: 4px;
+            white-space: nowrap;
+        }
+
+        .chat-toolbar select {
+            flex: 0 0 auto;
+            min-height: 34px;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius-sm);
+            background: var(--bg);
+            color: var(--ink);
+            padding: 5px 9px;
+            font-size: 13px;
+        }
+
+        #select-drawing-btn,
+        #clear-drawing-btn {
+            width: 92px;
+            flex: 0 0 92px;
+        }
+
+        #clear-chat-btn {
+            width: 34px;
+            height: 34px;
+            flex: 0 0 34px;
+            color: var(--danger);
+            font-size: 18px;
+        }
+
+        .selected-file {
+            width: 220px;
+            flex: 0 0 220px;
+            min-height: 18px;
+            color: var(--primary);
+            font-size: 12px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .selected-file:empty::before {
+            content: "";
+        }
+
+        .chat-messages {
+            position: relative;
+            flex: 1;
+            min-height: 0;
+            overflow-y: auto;
+            padding: 18px;
+            background: var(--surface);
+        }
+
+        .drop-zone {
+            position: absolute;
+            inset: 16px;
+            z-index: 10;
+            display: grid;
+            place-items: center;
+            border: 2px dashed var(--primary);
+            border-radius: var(--radius-lg);
+            background: color-mix(in oklch, var(--primary-soft) 82%, var(--bg));
+            color: var(--primary-hover);
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 160ms ease;
+            text-align: center;
+            font-weight: 750;
+        }
+
+        .drop-zone span {
+            display: block;
+            margin-top: 6px;
+            color: var(--muted);
+            font-size: 13px;
+            font-weight: 500;
+        }
+
+        .message {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            margin-bottom: 12px;
+        }
+
+        .message.user-message {
+            align-items: flex-end;
+        }
+
+        .message-content {
+            max-width: min(76%, 720px);
+            padding: 11px 13px;
+            border-radius: 12px;
+            border: 1px solid var(--line);
+            background: var(--surface-raised);
+            color: var(--ink);
+            box-shadow: var(--shadow-sm);
+            white-space: pre-line;
+            overflow-wrap: anywhere;
+        }
+
+        .user-message .message-content {
+            border-color: transparent;
+            background: var(--primary);
+            color: var(--bg);
+        }
+
+        .message-meta {
+            max-width: min(76%, 720px);
+            margin-top: 4px;
+            padding: 0 4px;
+            color: var(--muted);
+            font-size: 11px;
+            line-height: 1.35;
+        }
+
+        .user-message .message-meta {
+            text-align: right;
+        }
+
+        .loading .message-meta {
+            color: var(--subtle);
+        }
+
+        .loading .message-content {
+            position: relative;
+            display: inline-flex;
+            align-items: center;
+            gap: 10px;
+            min-width: 168px;
+            border-color: color-mix(in oklch, var(--primary) 32%, var(--line));
+            background: color-mix(in oklch, var(--primary-soft) 62%, var(--surface-raised));
+            color: var(--muted);
+            overflow: hidden;
+            animation: thinking-pulse 1.8s ease-in-out infinite;
+        }
+
+        .loading .message-content::before {
+            content: "";
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(
+                110deg,
+                transparent 0%,
+                transparent 28%,
+                color-mix(in oklch, var(--primary) 14%, transparent) 48%,
+                transparent 68%,
+                transparent 100%
+            );
+            transform: translateX(-100%);
+            animation: thinking-scan 2.2s ease-in-out infinite;
+        }
+
+        .thinking-text,
+        .thinking-dots {
+            position: relative;
+            z-index: 1;
+        }
+
+        .thinking-text {
+            color: var(--primary-hover);
+            font-weight: 650;
+        }
+
+        .thinking-dots {
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .thinking-dots i {
+            width: 6px;
+            height: 6px;
+            border-radius: 999px;
+            background: var(--primary);
+            opacity: 0.42;
+            animation: thinking-dot 1.2s ease-in-out infinite;
+        }
+
+        .thinking-dots i:nth-child(2) {
+            animation-delay: 0.16s;
+        }
+
+        .thinking-dots i:nth-child(3) {
+            animation-delay: 0.32s;
+        }
+
+        @keyframes thinking-pulse {
+            0%,
+            100% {
+                box-shadow: var(--shadow-sm);
+            }
+
+            50% {
+                box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 12%, transparent);
+            }
+        }
+
+        @keyframes thinking-scan {
+            0% {
+                transform: translateX(-100%);
+            }
+
+            52%,
+            100% {
+                transform: translateX(100%);
+            }
+        }
+
+        @keyframes thinking-dot {
+            0%,
+            80%,
+            100% {
+                opacity: 0.34;
+                transform: translateY(0);
+            }
+
+            40% {
+                opacity: 1;
+                transform: translateY(-3px);
+            }
+        }
+
+        .chat-input {
+            flex: 0 0 auto;
+            padding: 14px;
+            border-top: 1px solid var(--line);
+            background: var(--surface-raised);
+        }
+
+        .chat-input-row {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 10px;
+        }
+
+        .chat-note {
+            margin: 9px 0 0;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .data-panel {
+            grid-column: 1 / -1;
+            margin-top: 18px;
+        }
+
+        .table-actions {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .results-note {
+            display: inline-flex;
+            align-items: center;
+            min-height: 32px;
+            padding: 0 10px;
+            border-radius: 999px;
+            background: var(--primary-soft);
+            color: var(--primary-hover);
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+        .table-wrap {
+            overflow-x: auto;
+        }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-top: 25px;
-            border-radius: 8px;
-            overflow: hidden;
-            box-shadow: 0 3px 6px rgba(0, 0, 0, 0.1);
+            min-width: 820px;
         }
-        
-        th, td {
-            padding: 15px;
+
+        th,
+        td {
+            padding: 13px 14px;
+            border-bottom: 1px solid var(--line);
             text-align: left;
-            border-bottom: 1px solid #e0e0e0;
+            vertical-align: middle;
         }
-        
+
         th {
-            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
-            color: white;
-            font-weight: 600;
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.2);
-            letter-spacing: 1px;
+            background: var(--surface);
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 750;
         }
-        
-        tr {
-            transition: background-color 0.3s ease;
+
+        tbody tr:hover {
+            background: color-mix(in oklch, var(--primary-soft) 45%, var(--bg));
         }
-        
-        tr:hover {
-            background-color: #f8f9fa;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+        .file-cell {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+            min-width: 240px;
         }
-        
-        th {
-            transition: none;
+
+        .file-name {
+            color: var(--ink);
+            font-weight: 700;
+            word-break: break-word;
         }
-        
-        th:hover {
-            transform: none;
+
+        .file-name:hover {
+            color: var(--primary-hover);
         }
-        
-        a {
-            color: #3498db;
+
+        .file-meta {
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        .action-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .text-link {
+            display: inline-flex;
+            min-height: 30px;
+            align-items: center;
+            border-radius: var(--radius-sm);
+            padding: 0 8px;
+            font-size: 13px;
+            font-weight: 650;
+        }
+
+        .text-link:hover {
+            background: var(--surface-tint);
             text-decoration: none;
-            transition: all 0.3s ease;
-            font-weight: 500;
         }
-        
-        a:hover {
-            color: #2980b9;
-            text-decoration: underline;
-            transform: translateY(-1px);
+
+        .delete-link {
+            color: var(--danger);
         }
-        
-        .delete-btn {
-            color: #e74c3c;
-            font-weight: 600;
+
+        .delete-link:hover {
+            background: var(--danger-soft);
+            color: oklch(0.44 0.18 28);
         }
-        
-        .delete-btn:hover {
-            color: #c0392b;
-            transform: translateY(-1px);
-        }
-        
-        .no-data {
+
+        .empty-state {
+            padding: 54px 24px;
             text-align: center;
-            padding: 60px;
-            color: #7f8c8d;
-            font-style: italic;
-            font-size: 18px;
-            background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
-            border-radius: 8px;
-            margin-top: 25px;
+            color: var(--muted);
         }
-        
-        @media (max-width: 768px) {
-            .container {
-                padding: 20px;
-            }
-            
-            table {
-                font-size: 14px;
-            }
-            
-            th, td {
-                padding: 8px;
-            }
+
+        .empty-state strong {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--ink);
+            font-size: 16px;
         }
-        
-        .search-results {
-            margin-bottom: 30px;
+
+        .pagination {
+            display: flex;
+            justify-content: flex-end;
+            gap: 8px;
+            padding: 14px 18px 18px;
+            border-top: 1px solid var(--line);
         }
-        
-        .back-link {
-            margin-top: 20px;
-            text-align: center;
+
+        .modal {
+            position: fixed;
+            inset: 0;
+            z-index: 50;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            padding: 18px;
+            background: oklch(0 0 0 / 0.52);
         }
-        
-        .back-link a {
-            display: inline-block;
-            padding: 10px 20px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            font-weight: bold;
-            transition: all 0.3s ease;
-            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+
+        .modal-card {
+            width: min(620px, 100%);
+            max-height: min(760px, 86vh);
+            display: flex;
+            flex-direction: column;
+            border-radius: var(--radius-lg);
+            background: var(--surface-raised);
+            box-shadow: var(--shadow-md);
+            overflow: hidden;
         }
-        
-        .back-link a:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.15);
-            text-decoration: none;
+
+        .modal-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 14px;
+            padding: 16px 18px;
+            border-bottom: 1px solid var(--line);
         }
-        
-        /* 下拉菜单样式 */
-        #model-select {
-            padding: 4px 8px;
-            border-radius: 4px;
-            border: 1px solid #fff;
-            background: rgba(255,255,255,0.2);
-            color: white;
-            font-size: 14px;
+
+        .modal-header h3 {
+            margin: 0;
+            font-size: 16px;
+        }
+
+        .icon-button {
+            width: 34px;
+            height: 34px;
+            display: inline-grid;
+            place-items: center;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius-sm);
+            background: var(--bg);
+            color: var(--ink);
             cursor: pointer;
+            font-weight: 800;
         }
-        
-        #model-select option {
-            background-color: #3498db;
-            color: white;
-            padding: 4px 8px;
+
+        .drawing-list {
+            overflow-y: auto;
+            padding: 14px;
+        }
+
+        .drawing-item {
+            width: 100%;
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 12px;
+            align-items: center;
+            padding: 13px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--bg);
+            color: var(--ink);
+            cursor: pointer;
+            text-align: left;
+        }
+
+        .drawing-item + .drawing-item {
+            margin-top: 10px;
+        }
+
+        .drawing-item:hover {
+            border-color: var(--primary);
+            background: var(--primary-soft);
+        }
+
+        .drawing-item strong {
+            display: block;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .drawing-item span {
+            display: block;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
+        }
+
+        @media (max-width: 1100px) {
+            .overview,
+            .workbench {
+                grid-template-columns: 1fr;
+            }
+
+            .metric-strip {
+                min-width: 0;
+            }
+
+            .chat-panel {
+                height: auto !important;
+            }
+
+            .stack {
+                grid-template-rows: auto;
+                min-height: 0;
+            }
+        }
+
+        @media (max-width: 720px) {
+            .topbar {
+                height: auto;
+                align-items: flex-start;
+                flex-direction: column;
+                padding-top: 14px;
+                padding-bottom: 14px;
+            }
+
+            .topbar-actions {
+                justify-content: flex-start;
+            }
+
+            .workspace {
+                padding-top: 22px;
+            }
+
+            .overview h1 {
+                font-size: 24px;
+            }
+
+            .metric-strip,
+            .form-row,
+            .chat-input-row {
+                grid-template-columns: 1fr;
+            }
+
+            .select,
+            .button {
+                width: 100%;
+            }
+
+            #select-drawing-btn,
+            #clear-drawing-btn,
+            .selected-file {
+                width: 100%;
+                flex-basis: 100%;
+            }
+
+            .selected-file {
+                min-height: 0;
+            }
+
+            .message-content {
+                max-width: 92%;
+            }
+
+            .panel-header {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+            }
+
+            .loading .message-content::before {
+                display: none;
+            }
+
+            .thinking-dots i {
+                opacity: 0.7;
+                transform: none;
+            }
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>工程数字图纸智能管理系统</h2>
-        
-        <hr>
-        
-        <h3>搜索图纸 (OCR)</h3>
-        <div class="upload-form">
-            <form action="/search" method="get">
-                <input
-                    type="text"
-                    name="keyword"
-                    placeholder="输入关键词，例如：钢筋"
-                    value="{{ search_keyword }}"
-                    style="width:300px;height:35px;font-size:16px;"
-                >
-                <select name="sort" style="height:35px;font-size:16px;">
-                    <option value="desc" {% if sort == 'desc' %}selected{% endif %}>时间最新</option>
-                    <option value="asc" {% if sort == 'asc' %}selected{% endif %}>时间最早</option>
-                </select>
-                <button type="submit" style="height:35px;font-size:16px;line-height:35px;text-align:center;padding:0 20px;background:linear-gradient(135deg,#3498db 0%,#2980b9 100%);color:white;border:none;border-radius:6px;cursor:pointer;box-shadow:0 2px 4px rgba(0,0,0,0.2);transition:all 0.3s ease;font-weight:600;">🔍 搜索</button>
-            </form>
-        </div>
-        <br>
-
-        <h3>上传图纸（PDF/PNG）</h3>
-        <div class="upload-form">
-            <form action="/upload-drawing" method="post" enctype="multipart/form-data">
-                <div class="form-group">
-                    <label for="files">选择文件（可多选，支持PDF和PNG格式）：</label>
-                    <input type="file" id="files" name="files" accept=".pdf,.png" multiple required>
-                    <p style="margin-top: 10px; color: #666; font-size: 14px;">支持的文件格式：PDF文档和PNG图片</p>
-                </div>
-                <button type="submit">上传图纸</button>
-            </form>
-        </div>
-        
-        <hr>
-        
-        <h3>智能助手</h3>
-        <div class="upload-form" style="margin-bottom: 30px;">
-            <div class="chat-container" style="border: 2px solid #dee2e6; border-radius: 8px; overflow: hidden;">
-                <div class="chat-header" style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; padding: 15px; font-weight: 600; font-size: 18px; display: flex; justify-content: space-between; align-items: center;">
-                    <div>智能助手</div>
-                    <div style="display: flex; align-items: center; gap: 10px; font-size: 14px;">
-                        <span>模型:</span>
-                        <select id="model-select">
-                            <option value="qwen">千问VL (推荐)</option>
-                            <option value="deepseek">DeepSeek</option>
-                        </select>
-                        <button id="select-drawing-btn" title="选择已有图纸" style="background: rgba(255,255,255,0.2); color: white; border: 1px solid rgba(255,255,255,0.5); padding: 4px 10px; border-radius: 4px; cursor: pointer; font-size: 18px; font-weight: bold; transition: all 0.3s ease;">+</button>
-                        <span id="selected-drawing-name" style="color: #90EE90; font-size: 12px; display: none;"></span>
-                    </div>
-                </div>
-                <div id="chat-messages" style="height: 400px; overflow-y: auto; padding: 20px; background-color: #f9f9f9; position: relative;">
-                    <!-- 拖放上传区域 -->
-                    <div id="drop-zone" style="position: absolute; top: 0; left: 0; right: 0; bottom: 0; border: 2px dashed #3498db; border-radius: 8px; display: flex; align-items: center; justify-content: center; background-color: rgba(52, 152, 219, 0.1); opacity: 0; pointer-events: none; transition: all 0.3s ease; z-index: 10;">
-                        <div style="text-align: center; color: #3498db; font-size: 18px; font-weight: 600;">
-                            <div style="font-size: 48px; margin-bottom: 10px;">📄</div>
-                            <div>拖放PDF/PNG文件到这里分析</div>
-                        </div>
-                    </div>
-                    
-                    <div class="message bot-message" style="margin-bottom: 15px; max-width: 80%;">
-                        <div style="background-color: #e3f2fd; padding: 12px 16px; border-radius: 18px 18px 18px 4px; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                            <p style="margin: 0; font-size: 16px; line-height: 1.4;">你好！我是智能助手，有什么我可以帮助你的吗？</p>
-                            <p style="margin: 8px 0 0 0; font-size: 14px; color: #666;">提示：你可以拖放PDF/PNG文件到对话框中进行分析</p>
-                        </div>
-                    </div>
-                </div>
-                <div class="chat-input-container" style="padding: 15px; background-color: white; border-top: 1px solid #dee2e6;">
-                    <div style="display: flex; align-items: center;">
-                        <input type="text" id="chat-input" placeholder="输入你的问题..." style="flex: 1; margin-right: 10px; padding: 12px 16px; border: 2px solid #dee2e6; border-radius: 25px; font-size: 16px;">
-                        <button id="send-btn" style="background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; border: none; padding: 12px 24px; border-radius: 25px; cursor: pointer; font-size: 16px; font-weight: 600; transition: all 0.3s ease;">
-                            发送
-                        </button>
-                    </div>
-                    <div style="margin-top: 10px; font-size: 14px; color: #666; text-align: center;">
-                        提示：你可以询问关于图纸识别、技术要求解析等问题
-                    </div>
+{% set rows = drawings|default([], true) %}
+{% set keyword = search_keyword|default('', true) %}
+{% set current_sort = sort|default('desc', true) %}
+{% set current_page = page|default(1, true) %}
+    <div class="app">
+        <header class="topbar">
+            <div class="brand">
+                <div class="brand-mark" aria-hidden="true">SC</div>
+                <div class="brand-title">
+                    <strong>SolidCog</strong>
+                    <span>工程图纸智能工作台</span>
                 </div>
             </div>
-        </div>
-        
-<!-- 图纸选择弹窗 -->
-<div id="drawing-modal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); z-index: 1000; justify-content: center; align-items: center;">
-    <div style="background-color: white; border-radius: 12px; width: 90%; max-width: 600px; max-height: 80%; display: flex; flex-direction: column; box-shadow: 0 4px 20px rgba(0,0,0,0.3);">
-        <div style="padding: 20px; border-bottom: 2px solid #dee2e6; display: flex; justify-content: space-between; align-items: center; background: linear-gradient(135deg, #3498db 0%, #2980b9 100%); color: white; border-radius: 12px 12px 0 0;">
-            <h3 style="margin: 0; font-size: 18px;">选择图纸</h3>
-            <button id="close-drawing-modal" style="background: none; border: none; color: white; font-size: 24px; cursor: pointer; padding: 0; line-height: 1;">×</button>
-        </div>
-        <div id="drawing-list" style="padding: 20px; overflow-y: auto; flex: 1;">
-            <div style="text-align: center; padding: 40px; color: #666;">加载中...</div>
+            <div class="topbar-actions" aria-label="系统状态">
+                <span class="status-pill"><span class="status-dot"></span>FastAPI 在线</span>
+                <span class="status-pill">OCR + AI 分析</span>
+                <span class="status-pill">PDF / PNG</span>
+            </div>
+        </header>
+
+        <main class="workspace">
+            <section class="overview" aria-labelledby="page-title">
+                <div>
+                    <h1 id="page-title">工作台</h1>
+                    <p>上传图纸、检索 OCR、查看结果和询问 AI 都在这里完成。</p>
+                </div>
+                <div class="metric-strip" aria-label="当前工作台概览">
+                    <div class="metric">
+                        <b>{{ rows|length }}</b>
+                        <span>{% if keyword %}匹配图纸{% else %}当前图纸{% endif %}</span>
+                    </div>
+                    <div class="metric">
+                        <b>2</b>
+                        <span>AI 模型入口</span>
+                    </div>
+                    <div class="metric">
+                        <b>3</b>
+                        <span>OCR 结果分区</span>
+                    </div>
+                </div>
+            </section>
+
+            <section class="workbench" aria-label="图纸工作流">
+                <div class="stack">
+                    <section class="panel" aria-labelledby="search-title">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <h2 id="search-title">搜索图纸</h2>
+                                <p>按文件名、标题栏、技术要求和全局 OCR 内容检索。</p>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            <form class="form-row" action="/search" method="get">
+                                <input class="field" type="text" name="keyword" placeholder="输入关键词，例如：钢筋、轴线、材料" value="{{ keyword }}">
+                                <select class="field select" name="sort" aria-label="排序方式">
+                                    <option value="desc" {% if current_sort == 'desc' %}selected{% endif %}>时间最新</option>
+                                    <option value="asc" {% if current_sort == 'asc' %}selected{% endif %}>时间最早</option>
+                                </select>
+                                <button class="button button-primary" type="submit">搜索图纸</button>
+                            </form>
+                        </div>
+                    </section>
+
+                    <section class="panel" aria-labelledby="upload-title">
+                        <div class="panel-header">
+                            <div class="panel-title">
+                                <h2 id="upload-title">上传图纸</h2>
+                                <p>支持批量上传，上传后系统会写入图纸列表并执行 OCR 处理。</p>
+                            </div>
+                        </div>
+                        <div class="panel-body">
+                            <form action="/upload-drawing" method="post" enctype="multipart/form-data">
+                                <div class="upload-zone">
+                                    <label for="files">选择 PDF 或 PNG 文件</label>
+                                    <input class="field" type="file" id="files" name="files" accept=".pdf,.png" multiple required>
+                                    <p class="upload-help">可一次选择多个文件。AI 助手区域也支持直接拖入 PDF/PNG 做分析。</p>
+                                </div>
+                                <div style="margin-top: 14px;">
+                                    <button class="button button-primary" type="submit">上传图纸</button>
+                                </div>
+                            </form>
+                        </div>
+                    </section>
+                </div>
+
+                <section class="panel chat-panel" aria-labelledby="assistant-title">
+                    <div class="panel-header">
+                        <div class="panel-title">
+                            <h2 id="assistant-title">本地模型审核问答</h2>
+                            <p class="assistant-subtitle">选择图纸后询问具体问题，或拖入文件触发图纸分析。</p>
+                        </div>
+                        <div class="chat-toolbar">
+                            <span class="status-pill">MechVL 本地</span>
+                            <button id="select-drawing-btn" class="button button-secondary" type="button">选择图纸</button>
+                            <button id="clear-drawing-btn" class="button button-secondary" type="button" disabled aria-disabled="true">取消选择</button>
+                            <button id="clear-chat-btn" class="icon-button" type="button" aria-label="清理聊天记录" title="清理聊天记录">🗑</button>
+                            <span id="selected-drawing-name" class="selected-file" aria-live="polite"></span>
+                        </div>
+                    </div>
+                    <div id="chat-messages" class="chat-messages" aria-live="polite">
+                        <div id="drop-zone" class="drop-zone">
+                            <div>
+                                拖放 PDF/PNG 到这里作为问答上下文
+                                <span>放入后请继续输入你要审图或检索的问题</span>
+                            </div>
+                        </div>
+                        <div class="message bot-message">
+                            <div class="message-content">你好，我是 SolidCog 图纸助手。你可以先选择一张已上传图纸，再询问标题栏、技术要求、材料说明或审图要点。</div>
+                        </div>
+                    </div>
+                    <div class="chat-input">
+                        <div class="chat-input-row">
+                            <input class="field" type="text" id="chat-input" placeholder="输入你的问题，例如：这张图纸的关键技术要求是什么？">
+                            <button id="send-btn" class="button button-primary" type="button">发送问题</button>
+                        </div>
+                        <p class="chat-note">当已选择图纸时，问题会结合该图纸 OCR 和视觉分析结果回答。</p>
+                    </div>
+                </section>
+            </section>
+
+            <section class="panel data-panel" aria-labelledby="table-title">
+                <div class="panel-header">
+                    <div class="panel-title">
+                        <h2 id="table-title">{% if keyword %}搜索结果{% else %}图纸列表{% endif %}</h2>
+                        <p>{% if keyword %}当前关键词：{{ keyword }}{% else %}所有上传图纸按上传时间展示。{% endif %}</p>
+                    </div>
+                    <div class="table-actions">
+                        {% if keyword %}
+                            <span class="results-note">{{ rows|length }} 条结果</span>
+                            <a class="button button-secondary" href="/home">返回全部图纸</a>
+                        {% else %}
+                            <button class="button button-danger" type="button" onclick="deleteAllDrawings()">全部删除</button>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if rows %}
+                    <div class="table-wrap">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>编号</th>
+                                    <th>文件</th>
+                                    <th>类型</th>
+                                    <th>大小</th>
+                                    <th>上传时间</th>
+                                    <th>操作</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for d in rows %}
+                                <tr>
+                                    <td>{{ d[0] }}</td>
+                                    <td>
+                                        <div class="file-cell">
+                                            <a class="file-name" href="/uploads/{{ d[1] }}" target="_blank" draggable="true" data-id="{{ d[5] }}" data-filename="{{ d[1] }}">{{ d[1] }}</a>
+                                            <span class="file-meta">可打开原文件或拖入 AI 助手</span>
+                                        </div>
+                                    </td>
+                                    <td>{{ d[2]|upper }}</td>
+                                    <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }} MB</td>
+                                    <td>{{ d[4] }}</td>
+                                    <td>
+                                        <div class="action-group">
+                                            <a class="text-link" href="/view-ocr/{{ d[5] }}">查看 OCR</a>
+                                            <a class="text-link" href="/export-ocr/{{ d[5] }}">导出 OCR</a>
+                                            <a class="text-link delete-link" href="/delete-drawing/{{ d[5] }}" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                {% else %}
+                    <div class="empty-state">
+                        <strong>{% if keyword %}没有找到匹配图纸{% else %}还没有图纸数据{% endif %}</strong>
+                        <span>{% if keyword %}尝试更换关键词，或返回全部图纸。{% else %}从上方上传 PDF 或 PNG 后，这里会显示 OCR 和操作入口。{% endif %}</span>
+                    </div>
+                {% endif %}
+
+                {% if keyword %}
+                    <div class="pagination">
+                        {% if current_page|int > 1 %}
+                            <a class="button button-secondary" href="/search?keyword={{ keyword }}&page={{ current_page|int - 1 }}&sort={{ current_sort }}">上一页</a>
+                        {% endif %}
+                        <a class="button button-secondary" href="/search?keyword={{ keyword }}&page={{ current_page|int + 1 }}&sort={{ current_sort }}">下一页</a>
+                    </div>
+                {% endif %}
+            </section>
+        </main>
+    </div>
+
+    <div id="drawing-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="drawing-modal-title">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h3 id="drawing-modal-title">选择图纸作为对话上下文</h3>
+                <button id="close-drawing-modal" class="icon-button" type="button" aria-label="关闭">×</button>
+            </div>
+            <div id="drawing-list" class="drawing-list">
+                <div class="empty-state">加载中...</div>
+            </div>
         </div>
     </div>
-</div>
 
-        {% if search_keyword %}
-        <p>
-            当前搜索关键词：
-            <b>{{ search_keyword }}</b>
-        </p>
-        <h3>搜索结果</h3>
-        <div class="search-results">
-            <table>
-                <tr>
-                    <th>编号</th>
-                    <th>文件名</th>
-                    <th>文件大小(MB)</th>
-                    <th>上传时间</th>
-                    <th>操作</th>
-                </tr>
-                {% if 图纸列表 %}
-                    {% for d in 图纸列表 %}
-                    <tr>
-                        <td>{{ d[0] }}</td>
-                        <td>
-                            <a href="/uploads/{{ d[1] }}" target="_blank" draggable="true" data-filename="{{ d[1] }}" style="cursor: grab;">{{ d[1] }}</a>
-                        </td>
-                        <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }}</td>
-                        <td>{{ d[4] }}</td>
-                        <td>
-                            <a href="/delete-drawing/{{ d[5] }}" class="delete-btn" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
-                            |
-                            <a href="/view-ocr/{{ d[5] }}">查看OCR</a>
-                            |
-                            <a href="/export-ocr/{{ d[5] }}">导出OCR</a>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                {% else %}
-                    <tr>
-                        <td colspan="5" class="no-data">未找到匹配的图纸</td>
-                    </tr>
-                {% endif %}
-            </table>
-            <div class="back-link">
-                <a href="/home">返回图纸列表</a>
-            </div>
-            <div style="margin-top: 20px;">
-                <a href="/search?keyword={{ search_keyword }}&page={{ page - 1 }}&sort={{ sort }}">上一页</a>
-                |
-                <a href="/search?keyword={{ search_keyword }}&page={{ page + 1 }}&sort={{ sort }}">下一页</a>
-            </div>
-        </div>
-        {% else %}
-        <h3 style="display: flex; justify-content: space-between; align-items: center;">
-            图纸列表
-            <button onclick="if(confirm('确定要删除所有图纸吗？此操作不可恢复！')) { window.location.href = '/delete-all-drawings'; }" style="background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 14px; font-weight: 600;">
-                全部删除
-            </button>
-        </h3>
-        <table>
-            <tr>
-                <th>编号</th>
-                <th>文件名</th>
-                <th>文件大小(MB)</th>
-                <th>上传时间</th>
-                <th>操作</th>
-            </tr>
-            {% if 图纸列表 %}
-                {% for d in 图纸列表 %}
-                <tr>
-                    <td>{{ d[0] }}</td>
-                    <td>
-                        <a href="/uploads/{{ d[1] }}" target="_blank">{{ d[1] }}</a>
-                    </td>
-                    <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }}</td>
-                    <td>{{ d[4] }}</td>
-                    <td>
-                            <a href="/delete-drawing/{{ d[5] }}" class="delete-btn" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
-                            |
-                            <a href="/view-ocr/{{ d[5] }}">查看OCR</a>
-                            |
-                            <a href="/export-ocr/{{ d[5] }}">导出OCR</a>
-                        </td>
-                </tr>
-                {% endfor %}
-            {% else %}
-                <tr>
-                    <td colspan="5" class="no-data">暂无图纸数据</td>
-                </tr>
-            {% endif %}
-        </table>
-        {% endif %}
-        
-        <script>
-            const pageDrawingList = {{ 图纸列表 | tojson | safe }};
-            
-            document.addEventListener('DOMContentLoaded', function() {
-                const chatInput = document.getElementById('chat-input');
-                const sendBtn = document.getElementById('send-btn');
-                const chatMessages = document.getElementById('chat-messages');
-                const modelSelect = document.getElementById('model-select');
-                const dropZone = document.getElementById('drop-zone');
-                const drawingModal = document.getElementById('drawing-modal');
-                const drawingList = document.getElementById('drawing-list');
-                const selectDrawingBtn = document.getElementById('select-drawing-btn');
-                const closeDrawingModal = document.getElementById('close-drawing-modal');
-                const selectedDrawingName = document.getElementById('selected-drawing-name');
+    <script>
+        const pageDrawingList = {{ rows | tojson | safe }};
+        const chatStateKey = 'solidcog.chat-state.v1';
+        const welcomeMessage = '你好，我是 SolidCog 图纸助手。你可以先选择一张已上传图纸，再询问标题栏、技术要求、材料说明或审图要点。';
 
-                let selectedDrawingId = null;
+        document.addEventListener('DOMContentLoaded', function () {
+            const chatInput = document.getElementById('chat-input');
+            const sendBtn = document.getElementById('send-btn');
+            const chatMessages = document.getElementById('chat-messages');
+            const dropZone = document.getElementById('drop-zone');
+            const drawingModal = document.getElementById('drawing-modal');
+            const drawingList = document.getElementById('drawing-list');
+            const selectDrawingBtn = document.getElementById('select-drawing-btn');
+            const clearDrawingBtn = document.getElementById('clear-drawing-btn');
+            const clearChatBtn = document.getElementById('clear-chat-btn');
+            const closeDrawingModal = document.getElementById('close-drawing-modal');
+            const selectedDrawingName = document.getElementById('selected-drawing-name');
+            const leftWorkbenchStack = document.querySelector('.workbench > .stack');
+            const chatPanel = document.querySelector('.chat-panel');
+            const desktopWorkbench = window.matchMedia('(min-width: 1101px)');
 
-                function openDrawingModal() {
-                    drawingModal.style.display = 'flex';
-                    loadDrawings();
+            let selectedDrawingId = null;
+            let restoringChatState = false;
+
+            function syncChatPanelHeight() {
+                if (!leftWorkbenchStack || !chatPanel) return;
+                if (!desktopWorkbench.matches) {
+                    chatPanel.style.height = '';
+                    return;
                 }
+                chatPanel.style.height = `${Math.round(leftWorkbenchStack.getBoundingClientRect().height)}px`;
+            }
 
-                function closeDrawingModalFunc() {
-                    drawingModal.style.display = 'none';
+            if ('ResizeObserver' in window && leftWorkbenchStack) {
+                new ResizeObserver(syncChatPanelHeight).observe(leftWorkbenchStack);
+            } else {
+                window.addEventListener('resize', syncChatPanelHeight);
+            }
+            desktopWorkbench.addEventListener('change', syncChatPanelHeight);
+
+            function formatClock(date) {
+                return new Intl.DateTimeFormat('zh-CN', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                    second: '2-digit',
+                    hour12: false
+                }).format(date);
+            }
+
+            function formatDuration(milliseconds) {
+                const seconds = Math.max(0, milliseconds / 1000);
+                if (seconds < 10) return `${seconds.toFixed(2)} 秒`;
+                if (seconds < 60) return `${seconds.toFixed(1)} 秒`;
+
+                const minutes = Math.floor(seconds / 60);
+                const rest = Math.round(seconds % 60).toString().padStart(2, '0');
+                return `${minutes} 分 ${rest} 秒`;
+            }
+
+            function messageMeta(label, startedAt) {
+                const parts = [`${label} ${formatClock(new Date())}`];
+                if (typeof startedAt === 'number') {
+                    parts.push(`思考 ${formatDuration(performance.now() - startedAt)}`);
                 }
+                return parts.join(' · ');
+            }
 
-                function loadDrawings() {
-                    if (pageDrawingList && pageDrawingList.length > 0) {
-                        let html = '<div style="max-height: 400px; overflow-y: auto;">';
-                        pageDrawingList.forEach(function(drawing) {
-                            const drawingId = drawing[5];
-                            const filename = drawing[1];
-                            const fileSizeMB = (drawing[3] / 1024 / 1024).toFixed(2);
-                            const uploadTime = drawing[4];
-                            html += `<div class="drawing-item" data-id="${drawingId}" data-filename="${filename}" style="padding: 15px; border: 1px solid #dee2e6; border-radius: 8px; margin-bottom: 10px; cursor: pointer; transition: all 0.3s ease; background: white;">
-                                <div style="display: flex; justify-content: space-between; align-items: center;">
-                                    <div>
-                                        <div style="font-weight: 600; color: #2c3e50; margin-bottom: 5px;">${filename}</div>
-                                        <div style="font-size: 12px; color: #666;">${uploadTime} | ${fileSizeMB} MB</div>
-                                    </div>
-                                    <div style="color: #3498db; font-size: 24px;">→</div>
-                                </div>
-                            </div>`;
-                        });
-                        html += '</div>';
-                        drawingList.innerHTML = html;
-
-                        document.querySelectorAll('.drawing-item').forEach(function(item) {
-                            item.addEventListener('click', function() {
-                                selectDrawing(this.dataset.id, this.dataset.filename);
-                            });
-                        });
-                    } else {
-                        drawingList.innerHTML = '<div style="text-align: center; padding: 40px; color: #666;">暂无图纸，请先上传图纸</div>';
+            function initializeExistingMessages() {
+                chatMessages.querySelectorAll('.message').forEach(function (message) {
+                    if (!message.querySelector('.message-meta')) {
+                        const meta = document.createElement('div');
+                        meta.className = 'message-meta';
+                        meta.textContent = `显示 ${formatClock(new Date())}`;
+                        message.appendChild(meta);
                     }
+                });
+            }
+
+            function saveChatState() {
+                const messages = Array.from(chatMessages.querySelectorAll('.message:not(.loading)')).map(function (message) {
+                    return {
+                        sender: message.classList.contains('user-message') ? 'user' : 'bot',
+                        text: message.querySelector('.message-content')?.textContent || '',
+                        meta: message.querySelector('.message-meta')?.textContent || ''
+                    };
+                });
+                const state = {
+                    version: 1,
+                    messages: messages,
+                    selectedDrawingId: selectedDrawingId,
+                    selectedDrawingName: selectedDrawingName.textContent || ''
+                };
+                try {
+                    sessionStorage.setItem(chatStateKey, JSON.stringify(state));
+                } catch (error) {
+                    console.warn('Unable to save chat state:', error);
+                }
+            }
+
+            function restoreChatState() {
+                let state;
+                try {
+                    state = JSON.parse(sessionStorage.getItem(chatStateKey));
+                } catch (error) {
+                    sessionStorage.removeItem(chatStateKey);
+                    return false;
+                }
+                if (!state || state.version !== 1 || !Array.isArray(state.messages)) return false;
+
+                restoringChatState = true;
+                chatMessages.querySelectorAll('.message').forEach(function (message) { message.remove(); });
+                state.messages.forEach(function (message) {
+                    if ((message.sender === 'user' || message.sender === 'bot') && typeof message.text === 'string') {
+                        addMessage(message.text, message.sender, false, typeof message.meta === 'string' ? message.meta : '');
+                    }
+                });
+                if (!chatMessages.querySelector('.message')) {
+                    addMessage(welcomeMessage, 'bot', false, messageMeta('显示'));
                 }
 
-                function selectDrawing(drawingId, filename) {
-                    selectedDrawingId = parseInt(drawingId);
-                    selectedDrawingName.textContent = '📄 ' + filename;
-                    selectedDrawingName.style.display = 'inline';
-                    closeDrawingModalFunc();
-                    addMessage(`已选择图纸: ${filename}，请询问关于此图纸的问题`, 'bot');
+                const drawing = (pageDrawingList || []).find(function (item) {
+                    return Number(item[5]) === Number(state.selectedDrawingId);
+                });
+                if (drawing) {
+                    selectedDrawingId = Number(drawing[5]);
+                    selectedDrawingName.textContent = drawing[1];
+                    chatInput.placeholder = '请输入你要基于该图纸审查或检索的问题';
+                }
+                restoringChatState = false;
+                updateDrawingSelectionState();
+                saveChatState();
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                return true;
+            }
+
+            function clearChatHistory() {
+                if (!confirm('确定要清理当前标签页的聊天记录吗？当前图纸选择会保留。')) return;
+                chatMessages.querySelectorAll('.message').forEach(function (message) { message.remove(); });
+                addMessage(welcomeMessage, 'bot', false, messageMeta('显示'));
+            }
+
+            function openDrawingModal() {
+                drawingModal.style.display = 'flex';
+                loadDrawings();
+            }
+
+            function closeDrawingModalFunc() {
+                drawingModal.style.display = 'none';
+            }
+
+            function updateDrawingSelectionState() {
+                const hasSelection = selectedDrawingId !== null;
+                clearDrawingBtn.disabled = !hasSelection;
+                clearDrawingBtn.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
+                selectedDrawingName.textContent = hasSelection ? selectedDrawingName.textContent : '';
+                if (!restoringChatState) saveChatState();
+            }
+
+            function formatSize(bytes) {
+                const value = Number(bytes || 0) / 1024 / 1024;
+                return `${value.toFixed(2)} MB`;
+            }
+
+            function loadDrawings() {
+                drawingList.innerHTML = '';
+
+                if (!pageDrawingList || pageDrawingList.length === 0) {
+                    const empty = document.createElement('div');
+                    empty.className = 'empty-state';
+                    empty.textContent = '暂无图纸，请先上传图纸。';
+                    drawingList.appendChild(empty);
+                    return;
                 }
 
-                selectDrawingBtn.addEventListener('click', openDrawingModal);
-                closeDrawingModal.addEventListener('click', closeDrawingModalFunc);
-                drawingModal.addEventListener('click', function(e) {
-                    if (e.target === drawingModal) {
-                        closeDrawingModalFunc();
+                pageDrawingList.forEach(function (drawing) {
+                    const drawingId = drawing[5];
+                    const filename = drawing[1];
+                    const fileSizeMB = formatSize(drawing[3]);
+                    const uploadTime = drawing[4];
+
+                    const item = document.createElement('button');
+                    item.type = 'button';
+                    item.className = 'drawing-item';
+                    item.dataset.id = drawingId;
+                    item.dataset.filename = filename;
+
+                    const textWrap = document.createElement('span');
+                    const name = document.createElement('strong');
+                    name.textContent = filename;
+                    const meta = document.createElement('span');
+                    meta.textContent = `${uploadTime} · ${fileSizeMB}`;
+                    textWrap.appendChild(name);
+                    textWrap.appendChild(meta);
+
+                    const arrow = document.createElement('span');
+                    arrow.setAttribute('aria-hidden', 'true');
+                    arrow.textContent = '选择';
+
+                    item.appendChild(textWrap);
+                    item.appendChild(arrow);
+                    item.addEventListener('click', function () {
+                        selectDrawing(this.dataset.id, this.dataset.filename);
+                    });
+                    drawingList.appendChild(item);
+                });
+            }
+
+            function selectDrawing(drawingId, filename) {
+                selectedDrawingId = Number.parseInt(drawingId, 10);
+                selectedDrawingName.textContent = filename;
+                updateDrawingSelectionState();
+                closeDrawingModalFunc();
+                chatInput.placeholder = '请输入你要基于该图纸审查或检索的问题';
+                chatInput.focus();
+                addMessage(
+                    `已载入图纸：${filename}\n请继续输入你的问题。我会严格基于你的问题、当前图纸内容和系统参考规则回答；如果依据不足，会明确说明不足。`,
+                    'bot'
+                );
+            }
+
+            function clearSelectedDrawing() {
+                if (selectedDrawingId === null) return;
+                selectedDrawingId = null;
+                selectedDrawingName.textContent = '';
+                updateDrawingSelectionState();
+                chatInput.placeholder = '输入你的问题，例如：这张图纸的关键技术要求是什么？';
+                chatInput.focus();
+                addMessage('已取消当前图纸选择。你可以重新点击“选择图纸”，或直接拖入另一张图纸。', 'bot');
+            }
+
+            function findDrawingByFilename(filename) {
+                return (pageDrawingList || []).find(function (drawing) {
+                    return drawing[1] === filename;
+                });
+            }
+
+            function removeLoadingMessage() {
+                const loadingMessage = chatMessages.lastElementChild;
+                if (loadingMessage && loadingMessage.classList.contains('loading')) {
+                    chatMessages.removeChild(loadingMessage);
+                }
+            }
+
+            function normalizeAnswer(data) {
+                if (typeof data === 'string') return data;
+                if (data && typeof data.answer === 'string') return data.answer;
+                if (data && typeof data.detail === 'string') return data.detail;
+                return JSON.stringify(data, null, 2);
+            }
+
+            function setupDropZone() {
+                chatMessages.addEventListener('dragover', function (event) {
+                    event.preventDefault();
+                    dropZone.style.opacity = '1';
+                    dropZone.style.pointerEvents = 'auto';
+                });
+
+                chatMessages.addEventListener('dragleave', function (event) {
+                    event.preventDefault();
+                    if (!chatMessages.contains(event.relatedTarget)) {
+                        dropZone.style.opacity = '0';
+                        dropZone.style.pointerEvents = 'none';
                     }
                 });
 
-                // 拖放事件处理
-                function setupDropZone() {
-                    const messagesContainer = chatMessages;
-                    
-                    // 拖入时
-                    messagesContainer.addEventListener('dragover', function(e) {
-                        e.preventDefault();
-                        dropZone.style.opacity = '1';
-                        dropZone.style.pointerEvents = 'auto';
-                    });
-                    
-                    // 拖出时
-                    messagesContainer.addEventListener('dragleave', function(e) {
-                        e.preventDefault();
-                        dropZone.style.opacity = '0';
-                        dropZone.style.pointerEvents = 'none';
-                    });
-                    
-                    // 放置时
-                    messagesContainer.addEventListener('drop', function(e) {
-                        e.preventDefault();
-                        dropZone.style.opacity = '0';
-                        dropZone.style.pointerEvents = 'none';
-                        
-                        // 检查是否是从页面内拖动的链接
-                        const draggedElement = document.querySelector('.trae-browser-inspect-draggable');
-                        if (e.dataTransfer.types.includes('text/html')) {
-                            // 尝试获取拖动的文件名
-                            const html = e.dataTransfer.getData('text/html');
-                            const parser = new DOMParser();
-                            const doc = parser.parseFromString(html, 'text/html');
-                            const link = doc.querySelector('a[data-filename]');
-                            
-                            if (link) {
-                                const filename = link.getAttribute('data-filename');
-                                if (filename) {
-                                    // 直接分析已上传的文件
-                                    analyzeDrawing(filename);
-                                    return;
-                                }
+                chatMessages.addEventListener('drop', function (event) {
+                    event.preventDefault();
+                    dropZone.style.opacity = '0';
+                    dropZone.style.pointerEvents = 'none';
+
+                    if (event.dataTransfer.types.includes('text/html')) {
+                        const html = event.dataTransfer.getData('text/html');
+                        const parser = new DOMParser();
+                        const doc = parser.parseFromString(html, 'text/html');
+                        const link = doc.querySelector('a[data-filename]');
+
+                        if (link) {
+                            const filename = link.getAttribute('data-filename');
+                            const drawingId = link.getAttribute('data-id');
+                            if (filename && drawingId) {
+                                selectDrawing(drawingId, filename);
+                                return;
+                            }
+
+                            const drawing = findDrawingByFilename(filename);
+                            if (drawing) {
+                                selectDrawing(drawing[5], drawing[1]);
+                                return;
                             }
                         }
-                        
-                        // 处理从文件系统拖动的文件
-                        const files = e.dataTransfer.files;
-                        handleFileUpload(files);
-                    });
-                }
-                
-                // 处理文件上传
-                function handleFileUpload(files) {
-                    for (let i = 0; i < files.length; i++) {
-                        const file = files[i];
-                        
-                        // 检查文件类型
-                        const ext = file.name.split('.').pop().toLowerCase();
-                        if (ext !== 'pdf' && ext !== 'png') {
-                            addMessage(`不支持的文件类型: ${ext}，请上传PDF或PNG文件`, 'bot');
-                            continue;
-                        }
-                        
-                        addMessage(`正在上传文件: ${file.name}`, 'bot');
-                        
-                        // 创建FormData
-                        const formData = new FormData();
-                        formData.append('files', file);
-                        
-                        // 上传文件
-                        fetch('/upload-drawing', {
-                            method: 'POST',
-                            headers: {
-                                'Accept': 'application/json'
-                            },
-                            body: formData
-                        })
-                        .then(async response => {
-                            const data = await response.json().catch(() => null);
+                    }
+
+                    handleFileUpload(event.dataTransfer.files);
+                });
+            }
+
+            function handleFileUpload(files) {
+                Array.from(files || []).forEach(function (file) {
+                    const ext = file.name.split('.').pop().toLowerCase();
+                    if (ext !== 'pdf' && ext !== 'png') {
+                        addMessage(`不支持的文件类型：${ext}。请上传 PDF 或 PNG 文件。`, 'bot');
+                        return;
+                    }
+
+                    addMessage(`正在上传文件：${file.name}`, 'bot');
+
+                    const formData = new FormData();
+                    formData.append('files', file);
+
+                    fetch('/upload-drawing', {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' },
+                        body: formData
+                    })
+                        .then(async function (response) {
+                            const data = await response.json().catch(function () { return null; });
                             if (response.ok && data && data.success) {
-                                addMessage(`文件上传成功: ${file.name}`, 'bot');
-                                
-                                // 分析图纸
+                                addMessage(`文件上传成功：${file.name}`, 'bot');
                                 const uploadedFile = data.files && data.files[0];
-                                analyzeDrawing(uploadedFile ? uploadedFile.filename : file.name);
+                                if (uploadedFile && uploadedFile.id) {
+                                    selectDrawing(uploadedFile.id, uploadedFile.filename || file.name);
+                                } else {
+                                    addMessage('文件已上传，但没有返回图纸 ID。请从图纸列表中选择该图纸后再提问。', 'bot');
+                                }
                             } else {
                                 const message = data && (data.detail || data.message || data.error);
-                                addMessage(`文件上传失败: ${message || `HTTP ${response.status}`}`, 'bot');
+                                addMessage(`文件上传失败：${message || `HTTP ${response.status}`}`, 'bot');
                             }
                         })
-                        .catch(error => {
-                            addMessage(`上传文件时出错: ${error.message}`, 'bot');
-                            console.error('上传错误:', error);
+                        .catch(function (error) {
+                            addMessage(`上传文件时出错：${error.message}`, 'bot');
+                            console.error('Upload error:', error);
                         });
-                    }
-                }
-                
-                // 分析图纸
-                function analyzeDrawing(filename) {
-                    addMessage('正在分析图纸，请稍候...', 'bot', true);
-                    
-                    // 调用千问VL工具分析图纸
-                    fetch('/qwen-tool', {
+                });
+            }
+
+            function sendMessage() {
+                const message = chatInput.value.trim();
+                if (!message) return;
+                const requestStartedAt = performance.now();
+                addMessage(message, 'user', false, messageMeta('发送'));
+                chatInput.value = '';
+                addMessage('正在思考...', 'bot', true, messageMeta('请求'));
+
+                if (selectedDrawingId !== null) {
+                    fetch('/chat-with-drawing', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({
-                            tool_call: 'analyze_drawing',
-                            parameters: {
-                                image_path: `uploads/${filename}`,
-                                model_type: 'plus'
-                            }
+                            prompt: message,
+                            drawing_id: selectedDrawingId
                         })
                     })
-                    .then(response => response.json())
-                    .then(data => {
-                        // 移除加载状态
-                        const loadingMessage = chatMessages.lastElementChild;
-                        if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                            chatMessages.removeChild(loadingMessage);
-                        }
-                        
-                        if (data.success) {
-                            const analysis = data.data;
-                            let analysisText = '';
-                            
-                            if (analysis.title_block) {
-                                analysisText += '【标题栏】\n' + analysis.title_block + '\n\n';
-                            }
-                            if (analysis.tech_block) {
-                                analysisText += '【技术要求】\n' + analysis.tech_block + '\n\n';
-                            }
-                            if (analysis.all_text) {
-                                analysisText += '【完整分析】\n' + analysis.all_text;
-                            }
-                            
-                            addMessage(analysisText, 'bot');
-                        } else {
-                            addMessage(`分析图纸失败: ${data.error || '未知错误'}`, 'bot');
-                        }
-                    })
-                    .catch(error => {
-                        // 移除加载状态
-                        const loadingMessage = chatMessages.lastElementChild;
-                        if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                            chatMessages.removeChild(loadingMessage);
-                        }
-                        addMessage(`分析图纸时出错: ${error.message}`, 'bot');
-                        console.error('分析错误:', error);
-                    });
-                }
-                
-                function sendMessage() {
-                    const message = chatInput.value.trim();
-                    if (!message) return;
-
-                    const selectedModel = modelSelect.value;
-
-                    addMessage(message, 'user');
-                    chatInput.value = '';
-
-                    addMessage('正在思考...', 'bot', true);
-
-                    if (selectedDrawingId !== null) {
-                        fetch('/chat-with-drawing', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                prompt: message,
-                                drawing_id: selectedDrawingId,
-                                model: 'qwen-vl-plus'
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            const loadingMessage = chatMessages.lastElementChild;
-                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                                chatMessages.removeChild(loadingMessage);
-                            }
+                        .then(function (response) { return response.json(); })
+                        .then(function (data) {
+                            removeLoadingMessage();
                             if (data.success) {
-                                addMessage(data.answer, 'bot');
+                                addMessage(data.answer, 'bot', false, messageMeta('回复', requestStartedAt));
                             } else {
-                                addMessage(`分析失败: ${data.detail || '未知错误'}`, 'bot');
+                                addMessage(`分析失败：${data.detail || '未知错误'}`, 'bot', false, messageMeta('失败', requestStartedAt));
                             }
                         })
-                        .catch(error => {
-                            const loadingMessage = chatMessages.lastElementChild;
-                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                                chatMessages.removeChild(loadingMessage);
-                            }
-                            addMessage(`抱歉，出现了错误，请稍后再试。`, 'bot');
-                            console.error('Chat with drawing Error:', error);
+                        .catch(function (error) {
+                            removeLoadingMessage();
+                            addMessage('出现了错误，请稍后再试。', 'bot', false, messageMeta('失败', requestStartedAt));
+                            console.error('Chat with drawing error:', error);
                         });
-                    } else if (selectedModel === 'qwen') {
-                        fetch('/chat', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                prompt: message,
-                                model: 'qwen-vl-plus'
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            const loadingMessage = chatMessages.lastElementChild;
-                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                                chatMessages.removeChild(loadingMessage);
-                            }
-                            addMessage(data, 'bot');
-                        })
-                        .catch(error => {
-                            const loadingMessage = chatMessages.lastElementChild;
-                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                                chatMessages.removeChild(loadingMessage);
-                            }
-                            addMessage('抱歉，出现了错误，请稍后再试。', 'bot');
-                            console.error('千问VL Error:', error);
-                        });
-                    } else {
-                        // 调用DeepSeek API
-                        fetch('/chat', {
-                            method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({
-                                prompt: message,
-                                model: 'deepseek-chat'
-                            })
-                        })
-                        .then(response => response.json())
-                        .then(data => {
-                            // 移除加载状态
-                            const loadingMessage = chatMessages.lastElementChild;
-                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                                chatMessages.removeChild(loadingMessage);
-                            }
-                            // 添加AI回复
-                            addMessage(data, 'bot');
-                        })
-                        .catch(error => {
-                            // 移除加载状态
-                            const loadingMessage = chatMessages.lastElementChild;
-                            if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                                chatMessages.removeChild(loadingMessage);
-                            }
-                            // 添加错误消息
-                            addMessage('抱歉，出现了错误，请稍后再试。', 'bot');
-                            console.error('DeepSeek Error:', error);
-                        });
-                    }
+                    return;
                 }
-                
-                function addMessage(text, sender, isLoading = false) {
-                    const messageDiv = document.createElement('div');
-                    messageDiv.className = `message ${sender}-message`;
-                    messageDiv.style.marginBottom = '15px';
-                    messageDiv.style.maxWidth = '80%';
-                    
-                    if (sender === 'user') {
-                        messageDiv.style.marginLeft = 'auto';
+
+                removeLoadingMessage();
+                addMessage('请先选择一张图纸，再使用 MechVL 提问。', 'bot', false, messageMeta('需要图纸', requestStartedAt));
+            }
+
+            function addMessage(text, sender, isLoading, metaText) {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = `message ${sender}-message`;
+                if (isLoading) messageDiv.classList.add('loading');
+
+                const messageContent = document.createElement('div');
+                messageContent.className = 'message-content';
+                if (isLoading) {
+                    messageContent.setAttribute('role', 'status');
+                    messageContent.setAttribute('aria-live', 'polite');
+
+                    const thinkingText = document.createElement('span');
+                    thinkingText.className = 'thinking-text';
+                    thinkingText.textContent = text || '正在思考';
+
+                    const thinkingDots = document.createElement('span');
+                    thinkingDots.className = 'thinking-dots';
+                    thinkingDots.setAttribute('aria-hidden', 'true');
+                    for (let i = 0; i < 3; i += 1) {
+                        thinkingDots.appendChild(document.createElement('i'));
                     }
-                    
-                    if (isLoading) {
-                        messageDiv.className += ' loading';
-                    }
-                    
-                    const messageContent = document.createElement('div');
-                    messageContent.style.padding = '12px 16px';
-                    messageContent.style.borderRadius = sender === 'user' ? '18px 18px 4px 18px' : '18px 18px 18px 4px';
-                    messageContent.style.boxShadow = '0 2px 4px rgba(0,0,0,0.1)';
-                    messageContent.style.backgroundColor = sender === 'user' ? '#3498db' : '#e3f2fd';
-                    messageContent.style.color = sender === 'user' ? 'white' : 'black';
-                    
-                    const messageText = document.createElement('p');
-                    messageText.style.margin = '0';
-                    messageText.style.fontSize = '16px';
-                    messageText.style.lineHeight = '1.4';
-                    messageText.textContent = text;
-                    
-                    messageContent.appendChild(messageText);
-                    messageDiv.appendChild(messageContent);
-                    chatMessages.appendChild(messageDiv);
-                    
-                    // 滚动到底部
-                    chatMessages.scrollTop = chatMessages.scrollHeight;
+
+                    messageContent.appendChild(thinkingText);
+                    messageContent.appendChild(thinkingDots);
+                } else {
+                    messageContent.textContent = text;
                 }
-                
-                // 初始化拖放区域
-                setupDropZone();
-                
-                // 发送按钮点击事件
-                sendBtn.addEventListener('click', sendMessage);
-                
-                // 回车键发送
-                chatInput.addEventListener('keypress', function(e) {
-                    if (e.key === 'Enter') {
-                        sendMessage();
-                    }
-                });
-                
-                // 模型选择变化时的提示
-                modelSelect.addEventListener('change', function() {
-                    const selectedModel = this.value;
-                    const modelName = selectedModel === 'qwen' ? '千问VL' : 'DeepSeek';
-                    addMessage(`已切换到 ${modelName} 模型`, 'bot');
-                });
+
+                messageDiv.appendChild(messageContent);
+                const resolvedMetaText = metaText || messageMeta(sender === 'user' ? '发送' : (isLoading ? '请求' : '提示'));
+                if (resolvedMetaText) {
+                    const meta = document.createElement('div');
+                    meta.className = 'message-meta';
+                    meta.textContent = resolvedMetaText;
+                    messageDiv.appendChild(meta);
+                }
+                chatMessages.appendChild(messageDiv);
+                chatMessages.scrollTop = chatMessages.scrollHeight;
+                if (!isLoading && !restoringChatState) saveChatState();
+                return messageDiv;
+            }
+
+            selectDrawingBtn.addEventListener('click', openDrawingModal);
+            clearDrawingBtn.addEventListener('click', clearSelectedDrawing);
+            clearChatBtn.addEventListener('click', clearChatHistory);
+            closeDrawingModal.addEventListener('click', closeDrawingModalFunc);
+            drawingModal.addEventListener('click', function (event) {
+                if (event.target === drawingModal) closeDrawingModalFunc();
             });
-        </script>
-    </div>
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') closeDrawingModalFunc();
+            });
+            sendBtn.addEventListener('click', sendMessage);
+            chatInput.addEventListener('keydown', function (event) {
+                if (event.key === 'Enter') sendMessage();
+            });
+            initializeExistingMessages();
+            if (!restoreChatState()) {
+                updateDrawingSelectionState();
+                saveChatState();
+            }
+            setupDropZone();
+            syncChatPanelHeight();
+        });
+
+        function deleteAllDrawings() {
+            if (confirm('确定要删除所有图纸吗？此操作不可恢复。')) {
+                window.location.href = '/delete-all-drawings';
+            }
+        }
+    </script>
 </body>
 </html>

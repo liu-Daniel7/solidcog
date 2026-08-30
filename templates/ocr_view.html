@@ -1,173 +1,435 @@
 <!DOCTYPE html>
-<html>
+<html lang="zh-CN">
 <head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OCR 结果 · {{ filename }}</title>
+    <style>
+        :root {
+            --bg: oklch(1 0 0);
+            --surface: oklch(0.982 0.003 180);
+            --surface-raised: oklch(0.998 0 0);
+            --surface-tint: oklch(0.955 0.018 180);
+            --ink: oklch(0.205 0.018 230);
+            --muted: oklch(0.465 0.018 230);
+            --line: oklch(0.895 0.012 230);
+            --line-strong: oklch(0.78 0.02 230);
+            --primary: oklch(0.46 0.095 180);
+            --primary-hover: oklch(0.39 0.095 180);
+            --primary-soft: oklch(0.92 0.045 180);
+            --accent: oklch(0.62 0.13 58);
+            --accent-soft: oklch(0.94 0.05 58);
+            --nav: oklch(0.14 0.018 230);
+            --nav-muted: oklch(0.77 0.018 230);
+            --shadow-sm: 0 1px 2px oklch(0 0 0 / 0.08);
+            --radius-sm: 6px;
+            --radius: 10px;
+            --radius-lg: 14px;
+        }
 
-<title>OCR查看</title>
+        * {
+            box-sizing: border-box;
+        }
 
-<style>
+        body {
+            margin: 0;
+            font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif;
+            color: var(--ink);
+            background: var(--surface);
+            font-size: 15px;
+            line-height: 1.55;
+        }
 
-body {
-    font-family: Arial, sans-serif;
-    margin: 0;
-    padding: 20px;
-    background-color: #f5f5f5;
-}
+        a {
+            color: var(--primary);
+            text-decoration: none;
+        }
 
-.container {
-    max-width: 1200px;
-    margin: 0 auto;
-    background-color: white;
-    padding: 30px;
-    border-radius: 8px;
-    box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-}
+        a:hover {
+            color: var(--primary-hover);
+            text-decoration: underline;
+        }
 
-.header {
-    margin-bottom: 30px;
-    padding-bottom: 20px;
-    border-bottom: 2px solid #e0e0e0;
-}
+        :focus-visible {
+            box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 32%, transparent);
+            outline: 2px solid transparent;
+        }
 
-.header h1 {
-    color: #333;
-    margin: 0 0 10px 0;
-}
+        .topbar {
+            position: sticky;
+            top: 0;
+            z-index: 20;
+            min-height: 68px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 18px;
+            padding: 14px clamp(18px, 4vw, 44px);
+            background: var(--nav);
+            color: var(--bg);
+        }
 
-.info-section {
-    background-color: #f9f9f9;
-    padding: 20px;
-    border-radius: 6px;
-    margin-bottom: 30px;
-}
+        .brand {
+            min-width: 0;
+        }
 
-.info-section h3 {
-    color: #555;
-    margin: 0 0 10px 0;
-}
+        .brand strong {
+            display: block;
+            font-size: 16px;
+            line-height: 1.2;
+        }
 
-.info-section p {
-    color: #666;
-    margin: 5px 0;
-    font-size: 16px;
-}
+        .brand span {
+            display: block;
+            margin-top: 3px;
+            color: var(--nav-muted);
+            font-size: 12px;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
 
-.section {
-    border: 2px solid #444;
-    padding: 20px;
-    margin-bottom: 30px;
-    border-radius: 6px;
-    background-color: white;
-}
+        .button {
+            min-height: 38px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px solid oklch(1 0 0 / 0.14);
+            border-radius: var(--radius-sm);
+            padding: 0 13px;
+            background: oklch(1 0 0 / 0.08);
+            color: var(--bg);
+            font-weight: 700;
+            white-space: nowrap;
+        }
 
-.title-block {
-    border-left: 5px solid #667eea;
-    background-color: #f8f9ff;
-}
+        .button:hover {
+            background: oklch(1 0 0 / 0.14);
+            color: var(--bg);
+            text-decoration: none;
+        }
 
-.tech-block {
-    border-left: 5px solid #4caf50;
-    background-color: #f8fff8;
-}
+        .page {
+            width: min(1380px, 100%);
+            margin: 0 auto;
+            padding: 28px clamp(16px, 4vw, 44px) 56px;
+        }
 
-.section h2 {
-    color: #333;
-    margin: 0 0 20px 0;
-    padding-bottom: 10px;
-    border-bottom: 1px solid #e0e0e0;
-}
+        .header {
+            display: grid;
+            grid-template-columns: minmax(0, 1fr) auto;
+            gap: 22px;
+            align-items: end;
+            margin-bottom: 20px;
+        }
 
-pre {
-    font-size: 16px;
-    line-height: 1.5;
-    white-space: pre-wrap;
-    word-wrap: break-word;
-    background-color: #f9f9f9;
-    padding: 15px;
-    border-radius: 4px;
-    border: 1px solid #e0e0e0;
-    max-height: 400px;
-    overflow-y: auto;
-}
+        h1 {
+            margin: 0;
+            font-size: 28px;
+            line-height: 1.2;
+            letter-spacing: 0;
+            text-wrap: balance;
+        }
 
-.back-link {
-    margin-top: 30px;
-    text-align: center;
-}
+        .header p {
+            max-width: 70ch;
+            margin: 10px 0 0;
+            color: var(--muted);
+        }
 
-.back-button {
-    display: inline-block;
-    padding: 12px 24px;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    text-decoration: none;
-    border-radius: 6px;
-    font-size: 16px;
-    font-weight: bold;
-    transition: background 0.3s ease;
-}
+        .meta-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(130px, 1fr));
+            gap: 10px;
+            min-width: min(390px, 100%);
+        }
 
-.back-button:hover {
-    background: linear-gradient(135deg, #5a6fd8 0%, #684196 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0,0,0,0.1);
-}
+        .meta {
+            padding: 12px 13px;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface-raised);
+            box-shadow: var(--shadow-sm);
+        }
 
-.empty-message {
-    color: #999;
-    font-style: italic;
-    text-align: center;
-    padding: 40px 0;
-}
+        .meta span {
+            display: block;
+            color: var(--muted);
+            font-size: 12px;
+        }
 
-</style>
+        .meta strong {
+            display: block;
+            margin-top: 4px;
+            overflow: hidden;
+            color: var(--ink);
+            font-size: 14px;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
 
+        .layout {
+            display: grid;
+            grid-template-columns: 280px minmax(0, 1fr);
+            gap: 18px;
+            align-items: start;
+        }
+
+        .sidebar,
+        .document-panel {
+            border: 1px solid var(--line);
+            border-radius: var(--radius-lg);
+            background: var(--surface-raised);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .sidebar {
+            position: sticky;
+            top: 86px;
+            overflow: hidden;
+        }
+
+        .sidebar h2 {
+            margin: 0;
+            padding: 16px 16px 12px;
+            border-bottom: 1px solid var(--line);
+            font-size: 15px;
+        }
+
+        .nav-list {
+            display: grid;
+            gap: 6px;
+            padding: 12px;
+        }
+
+        .nav-list a {
+            display: flex;
+            justify-content: space-between;
+            gap: 8px;
+            min-height: 38px;
+            align-items: center;
+            padding: 0 10px;
+            border-radius: var(--radius-sm);
+            color: var(--ink);
+            font-weight: 650;
+        }
+
+        .nav-list a:hover {
+            background: var(--primary-soft);
+            color: var(--primary-hover);
+            text-decoration: none;
+        }
+
+        .nav-list span {
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .document-panel {
+            overflow: hidden;
+        }
+
+        .section {
+            display: grid;
+            grid-template-columns: 190px minmax(0, 1fr);
+            gap: 20px;
+            padding: 22px;
+            border-bottom: 1px solid var(--line);
+        }
+
+        .section:last-child {
+            border-bottom: 0;
+        }
+
+        .section-heading {
+            min-width: 0;
+        }
+
+        .section-heading h2 {
+            margin: 0;
+            font-size: 17px;
+            line-height: 1.25;
+        }
+
+        .section-heading p {
+            margin: 7px 0 0;
+            color: var(--muted);
+            font-size: 13px;
+        }
+
+        .badge {
+            display: inline-flex;
+            min-height: 26px;
+            align-items: center;
+            margin-top: 12px;
+            padding: 0 9px;
+            border-radius: 999px;
+            background: var(--accent-soft);
+            color: oklch(0.30 0.08 58);
+            font-size: 12px;
+            font-weight: 750;
+        }
+
+        pre {
+            max-height: 560px;
+            margin: 0;
+            overflow: auto;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+            border: 1px solid var(--line);
+            border-radius: var(--radius);
+            background: var(--surface);
+            color: var(--ink);
+            padding: 16px;
+            font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+            font-size: 13px;
+            line-height: 1.65;
+        }
+
+        .empty {
+            min-height: 140px;
+            display: grid;
+            place-items: center;
+            border: 1px dashed var(--line-strong);
+            border-radius: var(--radius);
+            background: var(--surface);
+            color: var(--muted);
+            text-align: center;
+            padding: 18px;
+        }
+
+        @media (max-width: 980px) {
+            .header,
+            .layout {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+            }
+
+            .nav-list {
+                grid-template-columns: repeat(3, minmax(0, 1fr));
+            }
+        }
+
+        @media (max-width: 680px) {
+            .topbar {
+                align-items: flex-start;
+                flex-direction: column;
+            }
+
+            h1 {
+                font-size: 23px;
+            }
+
+            .meta-grid,
+            .section {
+                grid-template-columns: 1fr;
+            }
+
+            .nav-list {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                scroll-behavior: auto !important;
+                transition-duration: 0.01ms !important;
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+            }
+        }
+    </style>
 </head>
-
 <body>
+    <header class="topbar">
+        <div class="brand">
+            <strong>SolidCog OCR 审阅</strong>
+            <span>{{ filename }}</span>
+        </div>
+        <a class="button" href="/home">返回工作台</a>
+    </header>
 
-<div class="container">
-    <div class="header">
-        <h1>OCR 识别结果</h1>
-    </div>
+    <main class="page">
+        <section class="header" aria-labelledby="page-title">
+            <div>
+                <h1 id="page-title">OCR 识别结果</h1>
+                <p>将标题栏、技术要求和全局 OCR 分开展示，便于快速审阅、复制和核对工程图纸文字。</p>
+            </div>
+            <div class="meta-grid" aria-label="文件信息">
+                <div class="meta">
+                    <span>文件名</span>
+                    <strong title="{{ filename }}">{{ filename }}</strong>
+                </div>
+                <div class="meta">
+                    <span>版式识别</span>
+                    <strong>{{ layout }}</strong>
+                </div>
+            </div>
+        </section>
 
-    <div class="info-section">
-        <h3>文件信息</h3>
-        <p><strong>文件名：</strong>{{ filename }}</p>
-        <p><strong>布局：</strong>{{ layout }}</p>
-    </div>
+        <section class="layout">
+            <aside class="sidebar" aria-label="OCR 分区导航">
+                <h2>结果分区</h2>
+                <nav class="nav-list">
+                    <a href="#title-block">标题栏 <span>{% if title_text %}有内容{% else %}为空{% endif %}</span></a>
+                    <a href="#tech-block">技术要求 <span>{% if tech_text %}有内容{% else %}为空{% endif %}</span></a>
+                    <a href="#all-block">全局 OCR <span>{% if all_text %}有内容{% else %}为空{% endif %}</span></a>
+                </nav>
+            </aside>
 
-    <div class="section title-block">
-        <h2>标题栏</h2>
-        {% if title_text %}
-        <pre>{{ title_text }}</pre>
-        {% else %}
-        <div class="empty-message">标题栏识别结果为空</div>
-        {% endif %}
-    </div>
+            <div class="document-panel">
+                <section id="title-block" class="section">
+                    <div class="section-heading">
+                        <h2>标题栏</h2>
+                        <p>图名、图号、比例、设计单位等关键索引信息通常位于这里。</p>
+                        <span class="badge">Title Block</span>
+                    </div>
+                    <div>
+                        {% if title_text %}
+                            <pre>{{ title_text }}</pre>
+                        {% else %}
+                            <div class="empty">标题栏识别结果为空。</div>
+                        {% endif %}
+                    </div>
+                </section>
 
-    <div class="section tech-block">
-        <h2>技术要求</h2>
-        {% if tech_text %}
-        <pre>{{ tech_text }}</pre>
-        {% else %}
-        <div class="empty-message">技术要求识别结果为空</div>
-        {% endif %}
-    </div>
+                <section id="tech-block" class="section">
+                    <div class="section-heading">
+                        <h2>技术要求</h2>
+                        <p>材料、施工、验收和注意事项等说明集中在此分区核对。</p>
+                        <span class="badge">Technical Notes</span>
+                    </div>
+                    <div>
+                        {% if tech_text %}
+                            <pre>{{ tech_text }}</pre>
+                        {% else %}
+                            <div class="empty">技术要求识别结果为空。</div>
+                        {% endif %}
+                    </div>
+                </section>
 
-    <div class="section">
-        <h2>全部（全局OCR）</h2>
-        {% if all_text %}
-        <pre>{{ all_text }}</pre>
-        {% else %}
-        <div class="empty-message">全局OCR识别结果为空</div>
-        {% endif %}
-    </div>
-
-    <div class="back-link">
-        <a href="/home" class="back-button">返回主页</a>
-    </div>
-</div>
-
+                <section id="all-block" class="section">
+                    <div class="section-heading">
+                        <h2>全局 OCR</h2>
+                        <p>完整 OCR 文本用于全文检索、复核和导出归档。</p>
+                        <span class="badge">Full OCR</span>
+                    </div>
+                    <div>
+                        {% if all_text %}
+                            <pre>{{ all_text }}</pre>
+                        {% else %}
+                            <div class="empty">全局 OCR 识别结果为空。</div>
+                        {% endif %}
+                    </div>
+                </section>
+            </div>
+        </section>
+    </main>
 </body>
-
 </html>
