@@ -29,6 +29,7 @@ debug_*.png
 *.swo
 
 node_modules/
+.superpowers/
 
 .coverage
 htmlcov/
