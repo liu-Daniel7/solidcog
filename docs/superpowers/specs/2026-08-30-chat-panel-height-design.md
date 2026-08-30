@@ -6,7 +6,7 @@ On desktop, keep the right-side local-model chat panel exactly aligned with the 
 
 ## Layout Behavior
 
-Observe the left `.stack` element with `ResizeObserver`. In the desktop two-column layout, apply its measured height to `.chat-panel`. Recalculate when the left stack or viewport size changes.
+Observe the left `.stack` element with `ResizeObserver`. In the desktop two-column layout, use 650 pixels as the minimum workbench height and apply the larger of 650 pixels or the measured left-stack height to both columns. Recalculate when the left stack or viewport size changes.
 
 The chat header and input area remain fixed within the panel. The `.chat-messages` element occupies the remaining height, has `min-height: 0`, and uses vertical overflow scrolling. New messages continue to scroll the message area to its bottom.
 
@@ -21,6 +21,7 @@ This change does not alter chat persistence, model calls, uploads, OCR data, or 
 Verify at desktop and mobile widths that:
 
 - The chat top and bottom align with the left stack on desktop.
+- Both desktop columns are at least 650 pixels tall.
 - Long chat content does not increase panel height.
 - The message region scrolls while the header and input stay visible.
 - Resizing the viewport maintains alignment.
