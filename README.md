@@ -319,4 +319,15 @@ solidcog/
 | `POST` | `/chat-with-drawing` | MechVL 图纸问答 |
 | `GET` | `/mechvl/health` | 由主程序检查 MechVL |
 
-本仓库当前没有发布许可证文件。在许可证明确之前，请勿假定代码属于 MIT 或其他开源许可证。
+## 许可证
+
+SolidCog 自有代码采用 [Apache License 2.0](LICENSE) 发布，版权归
+`liu-Daniel7` 所有。第三方组件的归属信息见 [NOTICE](NOTICE)。
+
+SolidCog 使用 [MechVL-4B-RL](https://huggingface.co/XiaofengAlg/MechVL-4B-RL)
+提供机械图纸问答能力。该模型由其原作者发布，并采用 Apache-2.0；本仓库不包含、
+不拥有且不重新授权其模型权重，安装脚本仅从原始 Hugging Face 仓库下载模型。
+
+使用 MechVL-4B-RL 时请引用其论文：*MechVQA: Benchmarking and Enhancing
+Multimodal LLMs on Comprehensive Mechanical Drawing Understanding*（2026）。
+DashScope API、Qwen 模型和其他第三方依赖仍分别遵循其自身许可证与服务条款。
