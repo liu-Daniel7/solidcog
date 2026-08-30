@@ -1,0 +1,1 @@
+"""SolidCog application package."""

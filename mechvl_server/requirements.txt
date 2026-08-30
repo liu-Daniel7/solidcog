@@ -1,0 +1,7 @@
+fastapi==0.128.8
+uvicorn==0.39.0
+transformers>=4.57.1
+accelerate>=1.10.0
+bitsandbytes>=0.47.0
+pillow>=11.0.0
+sentencepiece>=0.2.0
