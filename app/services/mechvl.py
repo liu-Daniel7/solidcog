@@ -20,7 +20,7 @@ def _preview(path: Path) -> Image.Image:
     if not pages:
         raise HTTPException(422, "无法生成图纸预览")
     image = pages[0]
-    image.thumbnail((1536, 1536))
+    image.thumbnail((1024, 1024))
     return image.convert("RGB")
 
 
