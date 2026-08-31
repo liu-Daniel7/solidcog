@@ -8,15 +8,15 @@ On the RTX 4060 Laptop GPU, the current MechVL request can exceed SolidCog's 180
 
 Use a balanced local-inference profile:
 
-- Limit the MechVL preview to 1536 by 1536 pixels.
-- Limit generation to 256 new tokens.
+- Limit the MechVL preview to 1024 by 1024 pixels.
+- Limit generation to 128 new tokens.
 - Allow SolidCog to wait up to 600 seconds.
 
 The existing OCR context remains part of the prompt, preserving dimension and title-block text that may be reduced by image downscaling. Request locking, error handling, model quantization, and Qwen OCR behavior remain unchanged.
 
 ## Configuration
 
-Set `MECHVL_TIMEOUT_SECONDS=600` in the SolidCog environment and document the same default in `.env.example`. Set the MechVL server's default `MECHVL_MAX_NEW_TOKENS` to 256 while retaining the environment-variable override.
+Set `MECHVL_TIMEOUT_SECONDS=600` in the SolidCog environment and document the same default in `.env.example`. Set the MechVL server's default `MECHVL_MAX_NEW_TOKENS` to 128 while retaining the environment-variable override.
 
 ## Verification
 

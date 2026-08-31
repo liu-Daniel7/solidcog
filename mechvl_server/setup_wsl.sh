@@ -7,5 +7,7 @@ source .venv/bin/activate
 python -m pip install --upgrade pip
 python -m pip install torch torchvision --index-url https://download.pytorch.org/whl/cu128
 python -m pip install -r requirements.txt
+python -m pip install einops
+python -m pip install flash-attn --no-build-isolation || echo "flash-attn unavailable; MechVL will use PyTorch SDPA"
 
 echo "Environment ready. Run ./download_model.sh, then ./start.sh"
