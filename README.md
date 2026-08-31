@@ -1,17 +1,105 @@
 # SolidCog
 
-SolidCog 是面向机械工程图纸的本地管理与 AI 审核工作台。系统使用阿里云 DashScope 的 `qwen3-vl-plus` 提取 PDF/PNG 图纸文字，并使用运行在 WSL2 中的 `MechVL-4B-RL` 回答图纸问题。图纸原文件、OCR 结果和聊天上下文均保留在本机；只有 OCR 图片会发送给 DashScope API。
+> 面向机械工程图纸的本地智能解析、检索与审核工作台
 
-## 功能
+[![License](https://img.shields.io/badge/license-Apache--2.0-2ea44f)](LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%2B%20WSL2-0078d4)](#完整安装)
+[![GPU](https://img.shields.io/badge/GPU-RTX%204060%208GB%20verified-76b900)](#性能与证据)
+[![OCR](https://img.shields.io/badge/OCR-MinerU2.5--Pro%20%7C%20Qwen3--VL-0ea5e9)](#mineru-文档解析能力)
+[![Review](https://img.shields.io/badge/review-MechVL--4B--RL-111827)](#mechvl-机械图纸理解能力)
 
-- 批量上传 PDF、PNG 图纸，单文件最大 50 MB
-- 使用 Qwen3-VL-Plus 分页提取标题栏、技术要求和完整文字
-- 按文件名和 OCR 内容检索图纸
-- 查看、导出 OCR 结果，管理本地图纸记录
-- 使用本地 MechVL-4B-RL 进行图纸问答和审核
-- 在当前浏览器标签页中保留聊天记录，并支持手动清理
+[核心能力](#核心能力) · [技术创新](#技术创新) · [模型依据](#mineru-文档解析能力) · [性能实测](#性能与证据) · [系统架构](#系统架构) · [快速开始](#快速开始) · [完整安装](#完整安装) · [论文引用](#论文引用)
 
-### MechVL 的功能与能力
+---
+
+SolidCog 将通用文档解析模型 `MinerU2.5-Pro`、机械图纸多模态模型 `MechVL-4B-RL` 与可选的 `Qwen3-VL-Plus` 云端 OCR 组合为一套可在消费级显卡上运行的图纸工作流。系统支持图纸上传、结构化 OCR、全文检索、结果导出和交互式审图，并通过本地调度器保证两个 GPU 模型不会同时驻留显存。
+
+## 目录
+
+- [项目要解决的问题](#项目要解决的问题)
+- [核心能力](#核心能力)
+- [技术创新](#技术创新)
+- [MinerU 文档解析能力](#mineru-文档解析能力)
+- [MechVL 机械图纸理解能力](#mechvl-机械图纸理解能力)
+- [性能与证据](#性能与证据)
+- [系统架构](#系统架构)
+- [快速开始](#快速开始)
+- [完整安装](#完整安装)
+- [完整流程验证](#完整流程验证)
+- [本地模型调度器](#本地模型调度器)
+- [开发者参考](#开发者参考)
+- [数据与隐私](#数据与隐私)
+- [常见问题](#常见问题)
+- [论文引用](#论文引用)
+- [许可证](#许可证)
+
+## 项目要解决的问题
+
+机械工程图纸不是普通的连续文本。标题栏、技术要求、多视图投影、尺寸与公差、表面粗糙度、公式和表格同时存在，文字往往尺寸小、分布稀疏，并依赖所在区域和视图才能正确解释。单一 OCR 模型可以读取文字，却不一定理解视图、装配和规范；单一机械视觉语言模型可以回答工程问题，但不适合承担批量结构化抽取与全文检索。
+
+SolidCog 因此将任务拆分为三个层次：
+
+1. MinerU 或 Qwen3-VL 将 PDF/PNG 转换为可检索的结构化内容。
+2. SQLite 与本地文件系统管理图纸、OCR 结果和检索索引。
+3. MechVL 结合图像与 OCR 上下文执行机械图纸问答和辅助审核。
+
+## 核心能力
+
+| 能力 | 实现 | 适用场景 |
+| --- | --- | --- |
+| 本地结构化 OCR | MinerU2.5-Pro 1.2B | 标题、正文、列表、公式、表格、布局和阅读顺序提取 |
+| 云端 OCR | Qwen3-VL-Plus | 无可用本地 GPU 或希望按批次使用云端识别 |
+| 机械图纸理解 | MechVL-4B-RL | 标注查找、视图关系、装配关系、尺寸推理和初步规范检查 |
+| 图纸管理 | FastAPI + SQLite | 批量上传、结果查看、文本导出、删除和本地持久化 |
+| 全文检索 | 文件名 + OCR 内容 | 按标题栏、技术要求、材料或任意识别文本查找图纸 |
+| 单卡模型切换 | 本地调度器 | MinerU 与 MechVL 分时驻留，显示阶段、已用时间和预计剩余时间 |
+
+支持批量上传 PDF、PNG 图纸，单文件最大 50 MB。OCR 后端按上传批次选择，聊天记录仅保留在当前浏览器标签页，并可手动清理。
+
+## 技术创新
+
+### 面向任务的双模型分工
+
+MinerU 负责可复用的结构化解析结果，MechVL 负责需要领域知识的机械图纸理解。OCR、检索和审图不再被压入同一个提示词或同一个模型请求中，每个组件拥有清晰的输入、输出和故障边界。
+
+### 消费级单卡互斥调度
+
+RTX 4060 Laptop 8 GB 无法稳定同时容纳 MinerU 与 MechVL。SolidCog 调度器先停止当前模型进程组、等待服务端口关闭并释放显存，再启动目标模型；模型执行任务时拒绝切换，完成后继续驻留，兼顾显存安全与连续操作效率。
+
+### 可观测的模型转换器
+
+浏览器可查看 `idle`、`MinerU OCR` 和 `MechVL 审核` 三种状态。切换过程展示当前阶段与已用时间，并根据目标模型最近五次启动记录估算剩余时间。手动切换与 OCR/问答触发的自动切换使用同一状态机。
+
+### 本地与云端可选择
+
+敏感图纸可以使用 MinerU 本地处理；没有本地 GPU 或需要不同识别路径时，可以按批次选择 Qwen3-VL 云端 OCR。选择云端模式时，图纸页面会发送至 DashScope。
+
+上述内容是 SolidCog 已实现的工程设计，不将模型组合、服务代理或计时功能表述为新的 OCR 算法。
+
+## MinerU 文档解析能力
+
+当前部署使用 `MinerU2.5-Pro-2605-1.2B`。其能力说明来自 MinerU 系列技术报告和公开评测，而不是根据项目界面反推。
+
+### 从传统解析流水线到两阶段高分辨率解析
+
+原始 MinerU 技术报告描述了一套由布局检测、分区 OCR、公式识别、表格解析、阅读顺序恢复及前后处理组成的文档解析流水线。分区域识别可以减少多栏文本被错误合并，并通过公式坐标遮罩与回填保持行内公式的位置。
+
+MinerU2.5 采用由全局到局部的两阶段视觉语言模型：首先在低分辨率页面上分析整体布局，随后从原始高分辨率页面裁剪目标区域，并对文字、公式和表格进行精细识别。这种设计避免把整张高分辨率页面直接送入模型，在保留细小文字和复杂元素识别能力的同时控制视觉 token 与计算开销。
+
+MinerU2.5-Pro 保持 1.2B 参数架构不变，重点通过数据构建、清洗和训练策略提高解析性能。这与 SolidCog 当前使用的 Pro 模型版本直接对应。
+
+### 在 SolidCog 中承担的任务
+
+- 识别标题、正文、列表和多栏区域，并恢复主要阅读顺序。
+- 提取技术要求、材料、标准说明和标题栏等可检索文本。
+- 识别公式并保留结构化表达。
+- 解析表格单元格关系，输出 HTML/Markdown 表格内容。
+- 保留图片、表格和其他页面元素的类型及布局信息。
+- 输出 Markdown、content list 和中间布局结果，供 SolidCog 映射为标题栏、技术要求、全文和原始结构化记录。
+
+MinerU 是通用文档解析模型，不负责判断机械投影关系、装配合理性或制图规范。低清扫描、极小标注、非标准字体、密集尺寸线和专用工程符号仍可能造成漏识别或误识别，关键结果必须由工程师复核。
+
+## MechVL 机械图纸理解能力
 
 MechVL-4B-RL 是论文 *MechVQA: Benchmarking and Enhancing Multimodal
 LLMs on Comprehensive Mechanical Drawing Understanding* 中提出的机械图纸领域
@@ -35,6 +123,35 @@ LLMs on Comprehensive Mechanical Drawing Understanding* 中提出的机械图纸
 **89.70、77.04 和 82.81**；该结果是论文基准评测，不代表本项目对任意实际图纸的
 准确率保证。
 
+## 性能与证据
+
+### 论文报告
+
+| 来源 | 论文报告结果 | 解释边界 |
+| --- | --- | --- |
+| MinerU2.5 | `olmOCR-bench` Overall 75.2 | 论文公开基准结果，不代表 SolidCog 对任意机械图纸的准确率 |
+| MinerU2.5-Pro | `OmniDocBench v1.6` 95.69，较同架构基线提高 2.71 分 | Pro 论文配置与公开基准结果，不等于当前安装环境的复现实验 |
+| MechVL-4B-RL | MechVQA 总分 84.85；识别 89.70、推理 77.04、判定 82.81 | MechVQA 论文基准结果，不代表实际生产审图通过率 |
+
+MinerU2.5 论文还报告了其在多栏、表格、旧扫描件、页眉页脚和细小长文本等文档类型上的分项结果。不同论文使用的数据集、指标和推理配置不同，不应仅依据单一总分进行跨模型结论外推。
+
+### SolidCog 本机实测
+
+测试环境为 RTX 4060 Laptop 8 GB、Windows + WSL2，MinerU 与 MechVL 分时运行：
+
+| 项目 | 实测结果 |
+| --- | --- |
+| MinerU 模型 | MinerU2.5-Pro 1.2B |
+| MinerU 首次完整冷启动 | 约 86 秒 |
+| MinerU 后续启动 | 约 53-106 秒 |
+| 单张工程图解析 | 约 9-12 秒 |
+| MinerU 峰值显存 | 7413 MiB |
+| MechVL 缓存后启动 | 约 205-271 秒 |
+| MinerU 卸载 | 约 3.8 秒 |
+| 模型互斥 | 8100 与 8200 模型服务不同时监听 |
+
+这些数据用于描述当前机器的可行性，不是跨设备性能承诺。页面尺寸、内容复杂度、模型缓存、磁盘速度、驱动和后台显存占用都会影响结果。
+
 ## 系统架构
 
 ```text
@@ -43,15 +160,37 @@ LLMs on Comprehensive Mechanical Drawing Understanding* 中提出的机械图纸
   +-- SolidCog / FastAPI（Windows，端口 8000）
        +-- SQLite：图纸元数据和 OCR 结果
        +-- uploads/：原始图纸文件
-       +-- DashScope qwen3-vl-plus：图纸 OCR
-       +-- MechVL 服务（WSL2，端口 8100）：本地图纸问答
+       +-- DashScope qwen3-vl-plus：可选云端 OCR
+       +-- 模型调度器（WSL2，端口 8090）
+            +-- MinerU（端口 8200）：本地图纸 OCR
+            +-- MechVL（端口 8100）：本地图纸问答
 ```
 
-主程序与 MechVL 是两个独立服务，必须分别启动。Qwen3-VL-Plus 是云端 API，不需要下载；MechVL-4B-RL 会下载到 WSL2 的 Hugging Face 缓存。
+`start_server.bat` 会自动启动轻量调度器。调度器默认不加载 GPU 模型，用户选择模式或执行 OCR/问答时才加载目标模型；当前模型会保持驻留到下一次切换。
 
-## 运行要求
+## 快速开始
 
-### 必需条件
+已经完成依赖和模型安装时，只需：
+
+```powershell
+cd C:\path\to\solidcog
+.\start_server.bat
+```
+
+打开 <http://127.0.0.1:8000/home>。首次使用建议按以下顺序验证：
+
+1. 在“OCR 后端”选择 MinerU 本地或 Qwen3-VL 云端。
+2. 上传一张 PDF/PNG，等待 OCR 与模型切换完成。
+3. 查看 OCR 结果，并用其中的材料或技术要求进行检索。
+4. 选择图纸向 MechVL 提问，观察调度器从 MinerU 切换至 MechVL。
+
+尚未安装环境时，从下一节开始执行。安装仅需一次，之后使用上述启动命令即可。
+
+## 完整安装
+
+### 运行要求
+
+#### 必需条件
 
 - Windows 10 22H2 或 Windows 11
 - 支持 WSL2 的 x64 处理器
@@ -60,17 +199,17 @@ LLMs on Comprehensive Mechanical Drawing Understanding* 中提出的机械图纸
 - 阿里云 DashScope API Key，并已开通 `qwen3-vl-plus`
 - 能访问 PyPI、PyTorch 和 Hugging Face
 
-### 硬件建议
+#### 硬件建议
 
 | 项目 | 最低建议 | 推荐 |
 | --- | --- | --- |
 | NVIDIA 显存 | 8 GB，4-bit 推理 | 12 GB 或更高 |
 | 系统内存 | 16 GB | 32 GB |
-| 可用磁盘 | 25 GB | 40 GB |
+| 可用磁盘 | 40 GB | 60 GB |
 
-RTX 4060 Laptop 8 GB 已在本项目的 4-bit NF4 配置下验证。8 GB 显存余量较小，推理期间不要同时运行其他占用 GPU 的模型或程序。没有 NVIDIA GPU 时，OCR 和图纸管理仍可运行，但当前 MechVL 服务不能启动。
+RTX 4060 Laptop 8 GB 已验证 MinerU2.5 和 4-bit MechVL 分时运行。MinerU 峰值约 7413 MiB，必须关闭其他大显存程序并通过调度器互斥切换。没有 NVIDIA GPU 时仍可使用 Qwen OCR 和图纸管理。
 
-## 一、安装基础软件
+### 一、安装基础软件
 
 在 PowerShell 中确认 Git 和 Python：
 
@@ -107,7 +246,7 @@ nvidia-smi
 
 这里必须显示 NVIDIA GPU。不要在 WSL2 内另外安装 Linux NVIDIA 显卡驱动。
 
-## 二、克隆仓库并安装主程序
+### 二、克隆仓库并安装主程序
 
 以下命令均在普通 PowerShell 中执行：
 
@@ -127,7 +266,7 @@ py -3.12 -m venv .venv
 
 预期输出为 `SolidCog dependencies OK`。
 
-## 三、配置 Qwen3-VL-Plus
+### 三、配置 Qwen3-VL-Plus
 
 在仓库根目录执行：
 
@@ -145,11 +284,15 @@ QWEN_VL_MODEL=qwen3-vl-plus
 QWEN_OCR_MAX_PAGES=10
 MECHVL_BASE_URL=http://127.0.0.1:8100
 MECHVL_TIMEOUT_SECONDS=600
+MECHVL_STARTUP_TIMEOUT=900
+MODEL_SCHEDULER_BASE_URL=http://127.0.0.1:8090
+MODEL_SWITCH_TIMEOUT_SECONDS=360
+MINERU_TIMEOUT_SECONDS=600
 ```
 
 不要把 `.env` 提交到 Git。中国内地 DashScope 使用上述北京地域地址；若 Key 属于其他地域，请按 DashScope 控制台提供的兼容模式地址修改 `QWEN_BASE_URL`。
 
-## 四、安装 MechVL 服务
+### 四、安装本地模型与调度器
 
 仍在仓库根目录的 PowerShell 中执行：
 
@@ -158,9 +301,18 @@ wsl.exe -d Ubuntu -- bash -lc "sudo apt-get update && sudo apt-get install -y py
 $repoWsl = (wsl.exe -d Ubuntu -- wslpath -a "$PWD").Trim()
 wsl.exe -d Ubuntu -- bash -lc "cd '$repoWsl/mechvl_server' && bash setup_wsl.sh"
 wsl.exe -d Ubuntu -- bash -lc "cd '$repoWsl/mechvl_server' && bash download_model.sh"
+wsl.exe -d Ubuntu -- bash -lc "mkdir -p ~/.local/share/solidcog/mineru && python3 -m venv ~/.local/share/solidcog/mineru/.venv"
+wsl.exe -d Ubuntu -- bash -lc "~/.local/share/solidcog/mineru/.venv/bin/pip install --upgrade pip && ~/.local/share/solidcog/mineru/.venv/bin/pip install 'mineru[all]'"
+wsl.exe -d Ubuntu -- bash -lc "cd '$repoWsl/model_scheduler' && bash setup.sh"
 ```
 
-`setup_wsl.sh` 会创建 `mechvl_server/.venv`，安装 CUDA 12.8 版 PyTorch、Transformers 和 4-bit 量化依赖。`download_model.sh` 会从 Hugging Face 下载 `XiaofengAlg/MechVL-4B-RL`。安装和下载可能持续数十分钟。
+三个环境相互独立：`mechvl_server/.venv` 运行 MechVL，`~/.local/share/solidcog/mineru/.venv` 运行 MinerU，`model_scheduler/.venv` 只运行轻量调度服务。安装可能持续较长时间。
+
+首次点击“MinerU OCR”时自动下载约 2.2 GB 的 MinerU2.5 模型。也可以用真实图纸提前触发下载：
+
+```powershell
+wsl.exe -d Ubuntu -- bash -lc "~/.local/share/solidcog/mineru/.venv/bin/mineru -p '$repoWsl/sample.png' -o /tmp/mineru-smoke -b vlm-engine"
+```
 
 下载完成后检查模型缓存：
 
@@ -170,31 +322,9 @@ wsl.exe -d Ubuntu -- bash -lc "du -sh ~/.cache/huggingface/hub/models--XiaofengA
 
 若下载中断，重新执行 `download_model.sh` 即可续传。
 
-## 五、启动两个服务
-
-### 终端 A：启动 MechVL
+### 五、启动 SolidCog
 
 在仓库根目录打开 PowerShell：
-
-```powershell
-.\start_mechvl_wsl.bat
-```
-
-首次启动需要把模型载入显存。等待 Uvicorn 启动日志后，在另一个 PowerShell 中检查：
-
-```powershell
-curl.exe --noproxy "*" http://127.0.0.1:8100/health
-```
-
-成功响应示例：
-
-```json
-{"status":"ready","model":"XiaofengAlg/MechVL-4B-RL","cuda":"NVIDIA GeForce RTX 4060 Laptop GPU","busy":false}
-```
-
-### 终端 B：启动 SolidCog
-
-在仓库根目录再打开一个 PowerShell：
 
 ```powershell
 .\start_server.bat
@@ -209,36 +339,52 @@ curl.exe --noproxy "*" http://127.0.0.1:8000/
 然后打开：
 
 - 工作台：<http://127.0.0.1:8000/home>
-- API 文档：<http://127.0.0.1:8000/docs>
+- 主服务 API：<http://127.0.0.1:8000/docs>
+- 调度器状态：<http://127.0.0.1:8090/status>
 
-两个终端都需要保持打开。按 `Ctrl+C` 可停止对应服务。
+启动脚本检测 8090 端口；调度器未运行时会在 WSL 后台启动。也可以用 `start_scheduler_wsl.bat` 在独立终端查看调度日志。
 
-## 六、验证完整流程
+## 完整流程验证
 
-1. 打开工作台，上传一张清晰的 PDF 或 PNG 机械图纸。
-2. 等待 Qwen3-VL-Plus OCR 完成。
+1. 打开工作台，在 OCR 后端选择“MinerU 本地”。
+2. 上传一张清晰的 PDF 或 PNG，观察 MinerU 切换计时器并等待 OCR 完成。
 3. 点击“查看 OCR”，确认标题栏、技术要求或完整文字已有内容。
 4. 返回工作台，输入刚识别出的文字，确认能检索到该图纸。
-5. 在“本地模型审核问答”中选择这张图纸并提出相关问题。
-6. 等待 MechVL 返回回答；8 GB 显存设备单次推理可能需要数分钟。
+5. 在问答区选择图纸并提问，系统会自动停止 MinerU、释放显存并加载 MechVL。
+6. 确认转换器显示 MechVL 已就绪并得到回答。
+7. 将 OCR 后端改为 Qwen3-VL，上传另一张图纸，确认本地 GPU 模式不变。
 
-完成以上六步即表示 DashScope OCR、SQLite、文件存储、全文检索和 MechVL 本地问答链路均正常。
+完成以上七步即表示 DashScope OCR、SQLite、文件存储、全文检索和 MechVL 本地问答链路均正常。
 
-## 日常启动
+### 日常启动
 
-安装只需执行一次。以后在仓库根目录分别打开两个 PowerShell：
+安装只需执行一次。以后只运行 `start_server.bat`。模型转换器支持“空闲”“MinerU OCR”“MechVL 审核”；自动操作与手动点击使用同一套互斥调度逻辑。
+
+## 本地模型调度器
+
+1. 浏览器通过 `/local-model/status` 读取调度器真实状态。
+2. 手动切换调用 `/local-model/switch/{mode}`；接口立即返回，页面继续轮询阶段与计时。
+3. MinerU 上传将 `ocr_backend=mineru` 传给 `/upload-drawing`，主服务把文件发送到调度器 `/mineru/parse`。
+4. 调度器停止 MechVL 进程组，等待端口关闭和显存释放，再启动 `mineru-api`。
+5. MinerU 返回 Markdown 和 content list；适配器映射为标题栏、技术要求、全文和布局，原始结果保存到 `mineru_results/`。
+6. MechVL 问答发送到调度器 `/mechvl/analyze`；调度器按相反顺序切换并代理原有请求。
+7. 调度器按模型记录最近五次切换耗时，状态接口返回已用时间与预计总时间，页面计算预计剩余时间。
+8. 模型执行任务时 `busy=true`，所有切换请求被拒绝，任务完成后当前模型继续驻留。
+
+手动检查和切换：
 
 ```powershell
-.\start_mechvl_wsl.bat
+curl.exe --noproxy "*" http://127.0.0.1:8090/status
+curl.exe --noproxy "*" -X POST http://127.0.0.1:8090/switch/mineru
+curl.exe --noproxy "*" -X POST http://127.0.0.1:8090/switch/mechvl
+curl.exe --noproxy "*" -X POST http://127.0.0.1:8090/switch/idle
 ```
 
-```powershell
-.\start_server.bat
-```
+日志位于 WSL 的 `~/.local/share/solidcog/scheduler/`。`mineru.log` 和 `mechvl.log` 分别记录模型启动与推理错误，`timings.json` 保存切换历史。
 
-先等待 MechVL `/health` 返回 `ready`，再使用图纸问答。仅使用上传、OCR、搜索功能时，可以不启动 MechVL。
+## 开发者参考
 
-## 测试
+### 测试
 
 测试使用临时数据库和上传目录，不会修改正式数据：
 
@@ -246,13 +392,52 @@ curl.exe --noproxy "*" http://127.0.0.1:8000/
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
+### 项目结构
+
+```text
+solidcog/
+├─ main.py                  # FastAPI 入口
+├─ app/
+│  ├─ application.py       # 应用创建与路由注册
+│  ├─ config.py            # 环境变量和路径
+│  ├─ database.py          # SQLite 初始化
+│  ├─ repositories/        # 数据访问
+│  ├─ routers/             # 页面、图纸和 AI HTTP 接口
+│  └─ services/            # OCR、文件、Qwen、MechVL 业务逻辑
+├─ mechvl_server/           # WSL2 本地模型服务
+├─ model_scheduler/         # MinerU/MechVL 互斥调度服务
+├─ templates/               # HTML/CSS/JavaScript 页面
+├─ tests/                   # 标准库 unittest 测试
+├─ requirements.txt        # Windows 主服务依赖
+├─ start_server.bat        # SolidCog 与调度器日常启动入口
+└─ start_scheduler_wsl.bat # 调度器前台诊断入口
+```
+
+### 主要接口
+
+| 方法 | 路径 | 用途 |
+| --- | --- | --- |
+| `GET` | `/` | 主服务状态 |
+| `GET` | `/home` | 工作台 |
+| `GET` | `/search` | 文件名与 OCR 全文检索 |
+| `POST` | `/upload-drawing` | 上传并 OCR |
+| `GET` | `/drawings` | 图纸列表 |
+| `GET` | `/ocr/{id}` | OCR JSON |
+| `GET` | `/view-ocr/{id}` | OCR 页面 |
+| `GET` | `/export-ocr/{id}` | 导出 OCR 文本 |
+| `POST` | `/chat-with-drawing` | MechVL 图纸问答 |
+| `GET` | `/mechvl/health` | 由主程序检查 MechVL |
+| `GET` | `/local-model/status` | 本地调度状态和双计时 |
+| `POST` | `/local-model/switch/{mode}` | 手动切换本地 GPU 模式 |
+
 ## 数据与隐私
 
 - `database.db` 保存图纸元数据和 OCR 文本。
 - `uploads/` 保存上传的原始图纸。
 - `.env` 保存 API Key。
 - 浏览器聊天记录只存于当前标签页的 `sessionStorage`，关闭标签页后清除。
-- OCR 时，图纸页面会发送到 DashScope `qwen3-vl-plus`。
+- 选择 Qwen OCR 时图纸页面会发送到 DashScope；选择 MinerU 时文件不离开本机。
+- `mineru_results/` 保存 MinerU 原始结构化输出。
 - MechVL 问答在本机 WSL2 中执行，不调用外部聊天模型。
 
 上述本地文件均已被 Git 忽略。备份或迁移时应同时复制 `database.db` 与 `uploads/`。
@@ -303,45 +488,59 @@ SolidCog 访问 MechVL 时会忽略系统代理。若浏览器仍走代理，请
 ### 端口被占用
 
 ```powershell
-Get-NetTCPConnection -LocalPort 8000,8100 -ErrorAction SilentlyContinue
+Get-NetTCPConnection -LocalPort 8000,8090,8100,8200 -ErrorAction SilentlyContinue
 ```
 
 停止占用进程，或同步修改启动脚本与 `.env` 中对应端口。
 
-## 项目结构
+## 论文引用
 
-```text
-solidcog/
-├─ main.py                  # 三行 FastAPI 入口
-├─ app/
-│  ├─ application.py       # 应用创建与路由注册
-│  ├─ config.py            # 环境变量和路径
-│  ├─ database.py          # SQLite 初始化
-│  ├─ repositories/        # 数据访问
-│  ├─ routers/             # 页面、图纸和 AI HTTP 接口
-│  └─ services/            # OCR、文件、Qwen、MechVL 业务逻辑
-├─ mechvl_server/           # WSL2 本地模型服务
-├─ templates/               # HTML/CSS/JavaScript 页面
-├─ tests/                   # 标准库 unittest 测试
-├─ requirements.txt        # Windows 主服务依赖
-├─ start_server.bat        # SolidCog 启动入口
-└─ start_mechvl_wsl.bat    # MechVL WSL2 启动入口
-```
-
-## 主要接口
-
-| 方法 | 路径 | 用途 |
+| 主题 | 论文 | 链接 |
 | --- | --- | --- |
-| `GET` | `/` | 主服务状态 |
-| `GET` | `/home` | 工作台 |
-| `GET` | `/search` | 文件名与 OCR 全文检索 |
-| `POST` | `/upload-drawing` | 上传并 OCR |
-| `GET` | `/drawings` | 图纸列表 |
-| `GET` | `/ocr/{id}` | OCR JSON |
-| `GET` | `/view-ocr/{id}` | OCR 页面 |
-| `GET` | `/export-ocr/{id}` | 导出 OCR 文本 |
-| `POST` | `/chat-with-drawing` | MechVL 图纸问答 |
-| `GET` | `/mechvl/health` | 由主程序检查 MechVL |
+| MinerU 流水线 | *MinerU: An Open-Source Solution for Precise Document Content Extraction* | [arXiv:2409.18839](https://arxiv.org/abs/2409.18839) |
+| MinerU2.5 架构 | *MinerU2.5: A Decoupled Vision-Language Model for Efficient High-Resolution Document Parsing* | [arXiv:2509.22186](https://arxiv.org/abs/2509.22186) |
+| 当前 Pro 模型 | *MinerU2.5-Pro: Pushing the Limits of Data-Centric Document Parsing at Scale* | [arXiv:2604.04771](https://arxiv.org/abs/2604.04771) |
+| 文档解析评测 | *OmniDocBench: Benchmarking Diverse PDF Document Parsing with Comprehensive Annotations* | [arXiv:2412.07626](https://arxiv.org/abs/2412.07626) |
+| 机械图纸理解 | *MechVQA: Benchmarking and Enhancing Multimodal LLMs on Comprehensive Mechanical Drawing Understanding* | [arXiv:2605.30794](https://arxiv.org/abs/2605.30794) |
+
+BibTeX 使用 `and others` 压缩超长作者列表；正式投稿时可从对应 arXiv 页面导出完整作者元数据。
+
+```bibtex
+@article{wang2024mineru,
+  title   = {MinerU: An Open-Source Solution for Precise Document Content Extraction},
+  author  = {Wang, Bin and others},
+  journal = {arXiv preprint arXiv:2409.18839},
+  year    = {2024}
+}
+
+@article{niu2025mineru25,
+  title   = {MinerU2.5: A Decoupled Vision-Language Model for Efficient High-Resolution Document Parsing},
+  author  = {Niu, Junbo and others},
+  journal = {arXiv preprint arXiv:2509.22186},
+  year    = {2025}
+}
+
+@article{wang2026mineru25pro,
+  title   = {MinerU2.5-Pro: Pushing the Limits of Data-Centric Document Parsing at Scale},
+  author  = {Wang, Bin and others},
+  journal = {arXiv preprint arXiv:2604.04771},
+  year    = {2026}
+}
+
+@article{ouyang2024omnidocbench,
+  title   = {OmniDocBench: Benchmarking Diverse PDF Document Parsing with Comprehensive Annotations},
+  author  = {Ouyang, Linke and others},
+  journal = {arXiv preprint arXiv:2412.07626},
+  year    = {2024}
+}
+
+@article{kou2026mechvqa,
+  title   = {MechVQA: Benchmarking and Enhancing Multimodal LLMs on Comprehensive Mechanical Drawing Understanding},
+  author  = {Kou, Qian and Shi, Xiaofeng and Li, Yulin and Qiu, Xiaosong and Wang, Xinyang and Zhou, Hua and Cao, Dongxing},
+  journal = {arXiv preprint arXiv:2605.30794},
+  year    = {2026}
+}
+```
 
 ## 许可证
 

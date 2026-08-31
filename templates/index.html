@@ -225,6 +225,103 @@
             font-size: 12px;
         }
 
+        .model-control {
+            display: grid;
+            grid-template-columns: minmax(250px, auto) minmax(360px, 1fr) minmax(230px, auto);
+            gap: 18px;
+            align-items: center;
+            margin-bottom: 18px;
+            padding: 14px 16px;
+            border: 1px solid var(--line-strong);
+            border-radius: var(--radius);
+            background: var(--surface-raised);
+        }
+
+        .control-group { min-width: 0; }
+
+        .control-label {
+            display: block;
+            margin-bottom: 6px;
+            color: var(--muted);
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .segmented {
+            display: inline-flex;
+            max-width: 100%;
+            padding: 3px;
+            border: 1px solid var(--line);
+            border-radius: 8px;
+            background: var(--surface);
+        }
+
+        .segmented input {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .segmented label,
+        .mode-button {
+            min-height: 32px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            border: 0;
+            border-radius: 5px;
+            padding: 0 11px;
+            background: transparent;
+            color: var(--muted);
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 650;
+            white-space: nowrap;
+        }
+
+        .segmented input:checked + label,
+        .mode-button[aria-pressed="true"] {
+            background: var(--bg);
+            color: var(--primary-hover);
+            box-shadow: var(--shadow-sm);
+        }
+
+        .segmented input:focus-visible + label,
+        .mode-button:focus-visible {
+            box-shadow: 0 0 0 3px color-mix(in oklch, var(--focus) 45%, transparent);
+        }
+
+        .mode-button:disabled { color: var(--subtle); cursor: not-allowed; }
+
+        .model-state {
+            justify-self: end;
+            min-width: 220px;
+            text-align: right;
+        }
+
+        .model-state-main {
+            display: flex;
+            align-items: center;
+            justify-content: flex-end;
+            gap: 8px;
+            font-size: 13px;
+            font-weight: 750;
+        }
+
+        .model-state-detail {
+            min-height: 18px;
+            margin-top: 3px;
+            color: var(--muted);
+            font-size: 12px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .model-state[data-tone="error"] .model-state-main { color: var(--danger); }
+        .model-state[data-tone="loading"] .status-dot { background: var(--accent); }
+        .model-state[data-tone="offline"] .status-dot { background: var(--subtle); }
+
         .workbench {
             display: grid;
             grid-template-columns: minmax(320px, 0.92fr) minmax(420px, 1.25fr);
@@ -885,6 +982,16 @@
         }
 
         @media (max-width: 1100px) {
+            .model-control { grid-template-columns: 1fr 1fr; }
+
+            .model-state {
+                grid-column: 1 / -1;
+                justify-self: stretch;
+                text-align: left;
+            }
+
+            .model-state-main { justify-content: flex-start; }
+
             .overview,
             .workbench {
                 grid-template-columns: 1fr;
@@ -905,6 +1012,23 @@
         }
 
         @media (max-width: 720px) {
+            .model-control { grid-template-columns: 1fr; }
+
+            .segmented {
+                display: grid;
+                grid-auto-flow: column;
+                width: 100%;
+            }
+
+            .segmented label,
+            .mode-button {
+                padding: 0 7px;
+                white-space: normal;
+                text-align: center;
+            }
+
+            .model-state { grid-column: auto; }
+
             .topbar {
                 height: auto;
                 align-items: flex-start;
@@ -1021,6 +1145,30 @@
                 </div>
             </section>
 
+            <section class="model-control" aria-label="OCR 与本地模型控制">
+                <div class="control-group">
+                    <span class="control-label">OCR 后端</span>
+                    <div class="segmented" role="radiogroup" aria-label="上传 OCR 后端">
+                        <input type="radio" id="ocr-mineru" name="ocr-backend-control" value="mineru" checked>
+                        <label for="ocr-mineru">MinerU 本地</label>
+                        <input type="radio" id="ocr-qwen" name="ocr-backend-control" value="qwen">
+                        <label for="ocr-qwen">Qwen3-VL 云端</label>
+                    </div>
+                </div>
+                <div class="control-group">
+                    <span class="control-label">本地 GPU</span>
+                    <div class="segmented" aria-label="本地 GPU 模式">
+                        <button class="mode-button" type="button" data-model-mode="idle" aria-pressed="true">空闲</button>
+                        <button class="mode-button" type="button" data-model-mode="mineru" aria-pressed="false">MinerU OCR</button>
+                        <button class="mode-button" type="button" data-model-mode="mechvl" aria-pressed="false">MechVL 审核</button>
+                    </div>
+                </div>
+                <div id="model-state" class="model-state" data-tone="offline" aria-live="polite">
+                    <div class="model-state-main"><span class="status-dot"></span><span id="model-state-label">正在连接调度器</span></div>
+                    <div id="model-state-detail" class="model-state-detail"></div>
+                </div>
+            </section>
+
             <section class="workbench" aria-label="图纸工作流">
                 <div class="stack">
                     <section class="panel" aria-labelledby="search-title">
@@ -1050,14 +1198,15 @@
                             </div>
                         </div>
                         <div class="panel-body">
-                            <form action="/upload-drawing" method="post" enctype="multipart/form-data">
+                            <form id="upload-form" action="/upload-drawing" method="post" enctype="multipart/form-data">
+                                <input id="upload-ocr-backend" type="hidden" name="ocr_backend" value="mineru">
                                 <div class="upload-zone">
                                     <label for="files">选择 PDF 或 PNG 文件</label>
                                     <input class="field" type="file" id="files" name="files" accept=".pdf,.png" multiple required>
                                     <p class="upload-help">可一次选择多个文件。AI 助手区域也支持直接拖入 PDF/PNG 做分析。</p>
                                 </div>
                                 <div style="margin-top: 14px;">
-                                    <button class="button button-primary" type="submit">上传图纸</button>
+                                    <button id="upload-btn" class="button button-primary" type="submit">上传图纸</button>
                                 </div>
                             </form>
                         </div>
@@ -1201,12 +1350,114 @@
             const clearChatBtn = document.getElementById('clear-chat-btn');
             const closeDrawingModal = document.getElementById('close-drawing-modal');
             const selectedDrawingName = document.getElementById('selected-drawing-name');
+            const uploadForm = document.getElementById('upload-form');
+            const uploadBtn = document.getElementById('upload-btn');
+            const uploadOcrBackend = document.getElementById('upload-ocr-backend');
+            const ocrBackendControls = document.querySelectorAll('input[name="ocr-backend-control"]');
+            const modeButtons = document.querySelectorAll('[data-model-mode]');
+            const modelState = document.getElementById('model-state');
+            const modelStateLabel = document.getElementById('model-state-label');
+            const modelStateDetail = document.getElementById('model-state-detail');
             const leftWorkbenchStack = document.querySelector('.workbench > .stack');
             const chatPanel = document.querySelector('.chat-panel');
             const desktopWorkbench = window.matchMedia('(min-width: 1101px)');
 
             let selectedDrawingId = null;
             let restoringChatState = false;
+            let schedulerSnapshot = null;
+            let schedulerSyncedAt = performance.now();
+
+            const stageLabels = {
+                queued: '正在排队',
+                stopping_mineru: '正在停止 MinerU',
+                stopping_mechvl: '正在停止 MechVL',
+                releasing_gpu: '正在释放显存',
+                starting_mineru: '正在启动 MinerU',
+                waiting_mineru: '正在加载 MinerU',
+                starting_mechvl: '正在启动 MechVL',
+                waiting_mechvl: '正在加载 MechVL'
+            };
+
+            function formatModelTime(seconds) {
+                const whole = Math.max(0, Math.floor(Number(seconds) || 0));
+                return `${Math.floor(whole / 60).toString().padStart(2, '0')}:${(whole % 60).toString().padStart(2, '0')}`;
+            }
+
+            function renderModelStatus() {
+                const data = schedulerSnapshot;
+                if (!data) return;
+                const switching = data.state === 'switching';
+                const elapsed = switching
+                    ? Number(data.elapsed_seconds || 0) + (performance.now() - schedulerSyncedAt) / 1000
+                    : 0;
+                const mode = data.current_mode || 'idle';
+
+                modeButtons.forEach(function (button) {
+                    button.setAttribute('aria-pressed', String(!switching && button.dataset.modelMode === mode));
+                    button.disabled = switching || Boolean(data.busy);
+                });
+
+                if (switching) {
+                    modelState.dataset.tone = 'loading';
+                    modelStateLabel.textContent = stageLabels[data.stage] || '正在切换本地模型';
+                    const estimate = Number(data.estimated_total_seconds || 0);
+                    let remaining = '首次加载，暂无法估算';
+                    if (estimate > 0) {
+                        remaining = estimate > elapsed
+                            ? `预计剩余 ${formatModelTime(estimate - elapsed)}`
+                            : '即将完成';
+                    }
+                    modelStateDetail.textContent = `已用 ${formatModelTime(elapsed)} · ${remaining}`;
+                    return;
+                }
+
+                if (data.state === 'error') {
+                    modelState.dataset.tone = 'error';
+                    modelStateLabel.textContent = '模型切换失败';
+                    modelStateDetail.textContent = data.error || '请重试或查看调度器日志';
+                    return;
+                }
+
+                modelState.dataset.tone = data.busy ? 'loading' : 'ready';
+                const labels = { idle: '本地 GPU 空闲', mineru: 'MinerU 已就绪', mechvl: 'MechVL 已就绪' };
+                modelStateLabel.textContent = data.busy ? (data.busy_operation || '模型正在处理任务') : labels[mode];
+                modelStateDetail.textContent = data.busy
+                    ? '任务执行期间不能切换模型'
+                    : (data.last_duration_seconds ? `最近切换用时 ${formatModelTime(data.last_duration_seconds)}` : '');
+            }
+
+            async function syncModelStatus() {
+                try {
+                    const response = await fetch('/local-model/status', { headers: { 'Accept': 'application/json' } });
+                    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+                    schedulerSnapshot = await response.json();
+                    schedulerSyncedAt = performance.now();
+                    renderModelStatus();
+                } catch (error) {
+                    schedulerSnapshot = null;
+                    modelState.dataset.tone = 'offline';
+                    modelStateLabel.textContent = '调度器未连接';
+                    modelStateDetail.textContent = 'Qwen OCR 和图纸管理仍可使用';
+                    modeButtons.forEach(function (button) { button.disabled = true; });
+                }
+            }
+
+            async function switchModel(mode) {
+                modeButtons.forEach(function (button) { button.disabled = true; });
+                try {
+                    const response = await fetch(`/local-model/switch/${mode}`, { method: 'POST' });
+                    const data = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+                    schedulerSnapshot = data;
+                    schedulerSyncedAt = performance.now();
+                    renderModelStatus();
+                } catch (error) {
+                    modelState.dataset.tone = 'error';
+                    modelStateLabel.textContent = '无法切换模型';
+                    modelStateDetail.textContent = error.message;
+                    await syncModelStatus();
+                }
+            }
 
             function syncChatPanelHeight() {
                 if (!leftWorkbenchStack || !chatPanel) return;
@@ -1492,6 +1743,7 @@
 
                     const formData = new FormData();
                     formData.append('files', file);
+                    formData.append('ocr_backend', uploadOcrBackend.value);
 
                     fetch('/upload-drawing', {
                         method: 'POST',
@@ -1529,6 +1781,7 @@
                 addMessage('正在思考...', 'bot', true, messageMeta('请求'));
 
                 if (selectedDrawingId !== null) {
+                    setTimeout(syncModelStatus, 500);
                     fetch('/chat-with-drawing', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
@@ -1601,6 +1854,37 @@
             }
 
             selectDrawingBtn.addEventListener('click', openDrawingModal);
+            modeButtons.forEach(function (button) {
+                button.addEventListener('click', function () { switchModel(button.dataset.modelMode); });
+            });
+            ocrBackendControls.forEach(function (control) {
+                control.addEventListener('change', function () {
+                    if (control.checked) uploadOcrBackend.value = control.value;
+                });
+            });
+            uploadForm.addEventListener('submit', async function (event) {
+                event.preventDefault();
+                uploadBtn.disabled = true;
+                uploadBtn.textContent = uploadOcrBackend.value === 'mineru' ? '正在准备 MinerU' : '正在调用 Qwen3-VL';
+                setTimeout(syncModelStatus, 500);
+                try {
+                    const response = await fetch('/upload-drawing', {
+                        method: 'POST',
+                        headers: { 'Accept': 'application/json' },
+                        body: new FormData(uploadForm)
+                    });
+                    const data = await response.json().catch(function () { return {}; });
+                    if (!response.ok || !data.success) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+                    uploadBtn.textContent = '上传完成';
+                    window.location.reload();
+                } catch (error) {
+                    uploadBtn.disabled = false;
+                    uploadBtn.textContent = '重新上传';
+                    modelState.dataset.tone = 'error';
+                    modelStateLabel.textContent = '图纸上传失败';
+                    modelStateDetail.textContent = error.message;
+                }
+            });
             clearDrawingBtn.addEventListener('click', clearSelectedDrawing);
             clearChatBtn.addEventListener('click', clearChatHistory);
             closeDrawingModal.addEventListener('click', closeDrawingModalFunc);
@@ -1621,6 +1905,11 @@
             }
             setupDropZone();
             syncChatPanelHeight();
+            syncModelStatus();
+            window.setInterval(renderModelStatus, 1000);
+            window.setInterval(function () {
+                if (!document.hidden) syncModelStatus();
+            }, 3000);
         });
 
         function deleteAllDrawings() {

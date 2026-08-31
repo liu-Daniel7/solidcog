@@ -1,6 +1,7 @@
 from pathlib import Path
 
 from app import config
+from app.services import mineru
 from app.services.images import load_pages
 from app.services.qwen import ocr_page
 
@@ -16,8 +17,12 @@ def _error(detail: str) -> dict:
     }
 
 
-def run_ocr(file_path: str | Path) -> dict:
+def run_ocr(file_path: str | Path, backend: str = "qwen") -> dict:
     path = Path(file_path)
+    if backend == "mineru":
+        return mineru.run(path)
+    if backend != "qwen":
+        return _error(f"不支持的 OCR 后端: {backend}")
     try:
         images = load_pages(path, dpi=400, limit=config.QWEN_OCR_MAX_PAGES)
         pages = []
