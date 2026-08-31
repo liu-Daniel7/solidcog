@@ -1,5 +1,8 @@
 import base64
+import gc
+import importlib.util
 import io
+import logging
 import os
 import threading
 
@@ -10,12 +13,14 @@ from pydantic import BaseModel
 from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
 
 MODEL_ID = os.getenv("MECHVL_MODEL_ID", "XiaofengAlg/MechVL-4B-RL")
-MAX_NEW_TOKENS = int(os.getenv("MECHVL_MAX_NEW_TOKENS", "256"))
+MAX_NEW_TOKENS = int(os.getenv("MECHVL_MAX_NEW_TOKENS", "128"))
 
 app = FastAPI(title="MechVL local inference service")
 inference_lock = threading.Lock()
 processor = None
 model = None
+attention_backend = "loading"
+logger = logging.getLogger(__name__)
 
 
 class AnalyzeRequest(BaseModel):
@@ -25,21 +30,34 @@ class AnalyzeRequest(BaseModel):
 
 
 def load_model() -> None:
-    global processor, model
+    global processor, model, attention_backend
     if model is not None:
         return
     processor = AutoProcessor.from_pretrained(MODEL_ID)
-    model = AutoModelForImageTextToText.from_pretrained(
-        MODEL_ID,
-        device_map="auto",
-        torch_dtype=torch.float16,
-        quantization_config=BitsAndBytesConfig(
-            load_in_4bit=True,
-            bnb_4bit_quant_type="nf4",
-            bnb_4bit_compute_dtype=torch.float16,
-            bnb_4bit_use_double_quant=True,
-        ),
+    quantization = BitsAndBytesConfig(
+        load_in_4bit=True,
+        bnb_4bit_quant_type="nf4",
+        bnb_4bit_compute_dtype=torch.float16,
+        bnb_4bit_use_double_quant=True,
     )
+    attention_backend = "flash_attention_2" if importlib.util.find_spec("flash_attn") else "sdpa"
+    try:
+        model = AutoModelForImageTextToText.from_pretrained(
+            MODEL_ID, device_map="auto", torch_dtype=torch.float16,
+            quantization_config=quantization, attn_implementation=attention_backend,
+        )
+    except Exception:
+        if attention_backend == "sdpa":
+            raise
+        logger.exception("FlashAttention 2 failed; falling back to PyTorch SDPA")
+        model = None
+        gc.collect()
+        torch.cuda.empty_cache()
+        attention_backend = "sdpa"
+        model = AutoModelForImageTextToText.from_pretrained(
+            MODEL_ID, device_map="auto", torch_dtype=torch.float16,
+            quantization_config=quantization, attn_implementation=attention_backend,
+        )
     model.eval()
 
 
@@ -56,6 +74,7 @@ def health():
         "status": "ready" if model is not None else "loading",
         "model": MODEL_ID,
         "cuda": torch.cuda.get_device_name(0) if torch.cuda.is_available() else None,
+        "attention": attention_backend,
         "busy": inference_lock.locked(),
     }
 

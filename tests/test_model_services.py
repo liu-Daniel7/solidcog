@@ -49,7 +49,7 @@ class ModelServiceTests(unittest.TestCase):
             path = Path(directory) / "large.png"
             Image.new("RGB", (2000, 1600), "white").save(path)
             preview = mechvl._preview(path)
-        self.assertEqual(preview.size, (1536, 1229))
+        self.assertEqual(preview.size, (1024, 819))
 
     def test_expected_model_defaults(self):
         self.assertEqual(config.QWEN_VL_MODEL, "qwen3-vl-plus")
