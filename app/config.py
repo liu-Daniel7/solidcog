@@ -33,6 +33,14 @@ QWEN_VL_MODEL = os.getenv("QWEN_VL_MODEL", "qwen3-vl-plus")
 QWEN_OCR_MAX_PAGES = max(1, int(os.getenv("QWEN_OCR_MAX_PAGES", "10")))
 MECHVL_BASE_URL = os.getenv("MECHVL_BASE_URL", "http://127.0.0.1:8100").rstrip("/")
 MECHVL_TIMEOUT_SECONDS = max(1, int(os.getenv("MECHVL_TIMEOUT_SECONDS", "180")))
+MODEL_SCHEDULER_BASE_URL = os.getenv(
+    "MODEL_SCHEDULER_BASE_URL", "http://127.0.0.1:8090"
+).rstrip("/")
+MODEL_SWITCH_TIMEOUT_SECONDS = max(1, int(os.getenv("MODEL_SWITCH_TIMEOUT_SECONDS", "360")))
+MINERU_TIMEOUT_SECONDS = max(1, int(os.getenv("MINERU_TIMEOUT_SECONDS", "600")))
+MINERU_RESULT_DIR = Path(
+    os.getenv("MINERU_RESULT_DIR", BASE_DIR / "mineru_results")
+).resolve()
 PLACEHOLDER_VALUES = {
     "replace-with-your-qwen-api-key",
     "your-qwen-api-key",

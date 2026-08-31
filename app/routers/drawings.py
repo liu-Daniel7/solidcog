@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.repositories import drawings as repository
@@ -8,10 +8,16 @@ router = APIRouter()
 
 
 @router.post("/upload-drawing")
-def upload(request: Request, files: list[UploadFile] = File(...)):
+def upload(
+    request: Request,
+    files: list[UploadFile] = File(...),
+    ocr_backend: str = Form("qwen"),
+):
     if not files:
         raise HTTPException(400, "请选择至少一个文件")
-    uploaded = [service.save_upload(file) for file in files]
+    if ocr_backend not in {"qwen", "mineru"}:
+        raise HTTPException(400, "OCR 后端必须是 qwen 或 mineru")
+    uploaded = [service.save_upload(file, ocr_backend) for file in files]
     if "application/json" in request.headers.get("accept", ""):
         return JSONResponse({"success": True, "files": uploaded})
     return RedirectResponse("/home", 303)

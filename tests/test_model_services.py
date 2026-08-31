@@ -6,7 +6,7 @@ from unittest.mock import Mock, patch
 from PIL import Image
 
 from app import config
-from app.services import ai, mechvl, qwen
+from app.services import ai, mechvl, mineru, model_scheduler, qwen
 
 
 class ModelServiceTests(unittest.TestCase):
@@ -27,19 +27,18 @@ class ModelServiceTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "drawing.png"
             Image.new("RGB", (32, 32), "white").save(path)
-            response = Mock(status_code=200)
-            response.raise_for_status.return_value = None
-            response.json.return_value = {"answer": "分析结果"}
-            with patch.object(mechvl._session, "post", return_value=response) as post:
+            with patch.object(
+                model_scheduler, "analyze_with_mechvl", return_value={"answer": "分析结果"}
+            ) as analyze:
                 answer = mechvl.analyze(path, "有什么问题？", "OCR内容")
         self.assertEqual(answer, "分析结果")
-        payload = post.call_args.kwargs["json"]
+        payload = analyze.call_args.args[0]
         self.assertEqual(payload["question"], "有什么问题？")
         self.assertTrue(payload["image_base64"])
 
     def test_mechvl_unavailable(self):
-        with patch.object(mechvl._session, "get", side_effect=mechvl.requests.ConnectionError):
-            with self.assertRaisesRegex(Exception, "MechVL 本地服务未启动"):
+        with patch.object(model_scheduler, "status", side_effect=Exception("offline")):
+            with self.assertRaisesRegex(Exception, "offline"):
                 mechvl.health()
 
     def test_mechvl_ignores_environment_proxy(self):
@@ -55,6 +54,18 @@ class ModelServiceTests(unittest.TestCase):
     def test_expected_model_defaults(self):
         self.assertEqual(config.QWEN_VL_MODEL, "qwen3-vl-plus")
         self.assertEqual(config.MECHVL_BASE_URL, "http://127.0.0.1:8100")
+
+    def test_mineru_markdown_adapter_preserves_engineering_fields(self):
+        markdown = """# 技术要求
+
+1. 未注尺寸公差按GB/T1804-m;
+2. 表面处理：镀镍。
+
+<table><tr><td>固定底板</td><td>GAC-OP525-0-2</td></tr><tr><td>材料</td><td>Q235</td></tr></table>
+"""
+        self.assertIn("GB/T1804-m", mineru._tech_block(markdown))
+        self.assertIn("GAC-OP525-0-2", mineru._title_block(markdown))
+        self.assertIn("Q235", mineru._plain_markdown(markdown))
 
 
 if __name__ == "__main__":
