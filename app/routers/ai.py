@@ -1,7 +1,7 @@
 from fastapi import APIRouter
 
 from app.schemas import ChatWithDrawingRequest, QwenToolRequest
-from app.services import ai, mechvl
+from app.services import ai, mechvl, model_scheduler
 
 router = APIRouter()
 
@@ -9,6 +9,16 @@ router = APIRouter()
 @router.get("/mechvl/health")
 def mechvl_health():
     return mechvl.health()
+
+
+@router.get("/local-model/status")
+def local_model_status():
+    return model_scheduler.status()
+
+
+@router.post("/local-model/switch/{mode}")
+def local_model_switch(mode: str):
+    return model_scheduler.switch(mode)
 
 
 @router.post("/chat-with-drawing")

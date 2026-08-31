@@ -34,6 +34,13 @@ class OcrDispatchTests(unittest.TestCase):
             result = ocr.run_ocr(self.image_path)
         self.assertIn("全部页面识别失败", result["error"])
 
+    def test_mineru_backend_dispatch(self):
+        expected = {"backend": "mineru_vlm", "all_text": "local"}
+        with patch.object(ocr.mineru, "run", return_value=expected) as run:
+            result = ocr.run_ocr(self.image_path, "mineru")
+        self.assertEqual(result, expected)
+        run.assert_called_once_with(self.image_path)
+
     def test_pdf_renders_without_external_poppler(self):
         pdf_path = Path(self.temp_dir.name) / "drawing.pdf"
         Image.new("RGB", (20, 10), "white").save(pdf_path, "PDF")

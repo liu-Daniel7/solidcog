@@ -16,7 +16,7 @@ def template_rows(rows: list[dict]) -> list[tuple]:
     ]
 
 
-def save_upload(file: UploadFile) -> dict:
+def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
     original_name = file.filename or ""
     extension = Path(original_name).suffix.lower()
     if extension not in {".pdf", ".png"}:
@@ -33,7 +33,7 @@ def save_upload(file: UploadFile) -> dict:
     try:
         with path.open("wb") as destination:
             shutil.copyfileobj(file.file, destination)
-        result = run_ocr(path)
+        result = run_ocr(path, ocr_backend)
         if result.get("error") and not result.get("all_text"):
             raise HTTPException(502, result["error"])
         values = {
@@ -47,7 +47,13 @@ def save_upload(file: UploadFile) -> dict:
             "upload_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             **values,
         })
-        return {"id": drawing_id, "filename": filename, "original_filename": original_name, "file_size": size}
+        return {
+            "id": drawing_id,
+            "filename": filename,
+            "original_filename": original_name,
+            "file_size": size,
+            "ocr_backend": result.get("backend", ocr_backend),
+        }
     except Exception:
         path.unlink(missing_ok=True)
         raise

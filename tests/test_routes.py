@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 from app import config, database
 from app.application import create_app
 from app.repositories import drawings
+from app.services import model_scheduler
 
 
 class RouteTests(unittest.TestCase):
@@ -54,6 +55,15 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(drawings.get(record_id)["filename"], "x.pdf")
         self.assertTrue(drawings.delete(record_id))
         self.assertIsNone(drawings.get(record_id))
+
+    def test_local_model_routes(self):
+        ready = {"state": "mineru_ready", "current_mode": "mineru"}
+        with patch.object(model_scheduler, "status", return_value=ready):
+            self.assertEqual(self.client.get("/local-model/status").json(), ready)
+        with patch.object(model_scheduler, "switch", return_value=ready) as switch:
+            response = self.client.post("/local-model/switch/mineru")
+        self.assertEqual(response.status_code, 200)
+        switch.assert_called_once_with("mineru")
 
 
 if __name__ == "__main__":
