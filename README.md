@@ -17,6 +17,7 @@ SolidCog 将通用文档解析模型 `MinerU2.5-Pro`、机械图纸多模态模�
 ## 目录
 
 - [项目要解决的问题](#项目要解决的问题)
+- [核心工程贡献](#核心工程贡献)
 - [核心能力](#核心能力)
 - [技术创新](#技术创新)
 - [MinerU 文档解析能力](#mineru-文档解析能力)
@@ -29,7 +30,6 @@ SolidCog 将通用文档解析模型 `MinerU2.5-Pro`、机械图纸多模态模�
 - [本地模型调度器](#本地模型调度器)
 - [开发者参考](#开发者参考)
 - [数据与隐私](#数据与隐私)
-- [常见问题](#常见问题)
 - [论文引用](#论文引用)
 - [许可证](#许可证)
 
@@ -42,6 +42,87 @@ SolidCog 因此将任务拆分为三个层次：
 1. MinerU 或 Qwen3-VL 将 PDF/PNG 转换为可检索的结构化内容。
 2. SQLite 与本地文件系统管理图纸、OCR 结果和检索索引。
 3. MechVL 结合图像与 OCR 上下文执行机械图纸问答和辅助审核。
+
+## 核心工程贡献
+
+MinerU 与 MechVL 提供上游模型能力；以下部分是 SolidCog 在模型之上完成的工程设计与实现。
+
+### OCR 分区与统一数据契约
+
+普通整页 OCR 只能返回一段文本，难以支持标题栏展示和技术要求检索。SolidCog 将结果统一为 `title_block`、`tech_block`、`all_text` 和 `layout` 四个分区：Qwen3-VL 通过固定 JSON 提示词输出，MinerU 的 Markdown、表格和 content list 则由适配器映射到相同结构。因此两个 OCR 后端可以复用数据库、全文检索、查看和导出链路，无需为模型分别维护业务代码。
+
+### OCR 可靠性优化
+
+- PDF 分页渲染并限制最大页数，避免单次输入无限扩大。
+- 单页失败时继续处理其他页面；全部失败时不写入空的“成功”记录。
+- 清理 Markdown 代码围栏并兼容模型返回的非标准 JSON。
+- 从 MinerU 结果中定向提取“技术要求”编号段落和页面下部标题栏表格。
+- 保存 MinerU 原始结构化结果，使适配错误可以回溯，而不是只保留最终纯文本。
+
+### MechVL 提示词与 OCR 上下文引导
+
+SolidCog 不只把图片交给 MechVL，而是组合图纸预览、标题栏、技术要求、全局 OCR 与用户问题。服务端提示词要求模型严格依据图纸，证据不足时明确说明，并禁止编造尺寸、材料、公差或标准条款。OCR 上下文还能补偿预览图缩放后丢失的细小标注，答案清理层则移除影响工作台阅读的 Markdown 分隔符。
+
+### 单卡调度与故障隔离
+
+本地调度器让 MinerU 与 MechVL 在 8 GB 显存上互斥驻留，任务忙碌时拒绝切换，启动失败、超时或异常退出时回收目标进程。状态接口和转换器展示阶段、已用时间与预计剩余时间。Qwen 云端 OCR、图纸管理和检索不依赖本地 GPU 服务，即使调度器不可用仍可继续使用。
+
+### 模块化重构
+
+原应用的路由、数据库、OCR 和模型调用集中在单个 `main.py`。当前版本将其拆分为配置、路由、服务、仓储和独立模型服务；HTTP 层、业务逻辑、数据访问和模型适配可以分别修改与测试。替换 OCR 后端时无需同步改动主要路由和数据库层，故障也更容易定位到具体模块。
+
+### 重构前后实测对比
+
+基线为模块化重构提交 `5cb4bc0` 的父版本，当前版本为本分支；测试使用同一台机器和同一 Python 环境。应用性能不包含 OCR 或 MechVL 推理。
+
+| 指标 | 重构前 | 当前版本 | 结果 |
+| --- | ---: | ---: | --- |
+| 最大应用 Python 文件 | 2000 行 | 110 行 | 减少 **94.5%** |
+| 业务模块 | 2 个 | 23 个 | 职责拆分为配置、路由、服务、仓储与模型服务 |
+| 应用导入中位数（15 次） | 650.8 ms | 650.4 ms | 基本持平 |
+| 应用导入 P95（15 次） | 772.4 ms | 670.3 ms | 本次样本降低 **13.2%** |
+| `/` 响应中位数（500 次） | 1.778 ms | 1.792 ms | 慢 0.8%，属毫秒级波动 |
+| `/home` 响应中位数（500 次） | 2.551 ms | 2.605 ms | 慢 2.1%，属毫秒级波动 |
+| 自动化测试 | 0 项 | 19 项 | 覆盖路由、OCR、模型服务、调度和数据删除 |
+| 自动验证的故障/安全场景 | 0 项 | 至少 7 类 | 包括空 OCR、额度错误、代理污染、服务不可用、输入限幅、模型互斥和忙碌拒绝切换 |
+
+模块化重构没有显著改变普通路由速度，其主要收益是将最大文件规模降低 94.5%，并建立可独立测试、可替换和可隔离故障的代码边界。“稳定性提升”以 19 项测试和故障保护场景表示，不使用缺少长期运行数据支撑的百分比。
+
+### 贡献对应的代码边界
+
+| 工程工作 | 主要代码 | 可独立维护的边界 |
+| --- | --- | --- |
+| OCR 后端选择 | `app/services/ocr.py` | 统一分发 MinerU 与 Qwen，不影响路由和数据库 |
+| Qwen 分区提示词与解析 | `app/services/qwen.py` | JSON 契约、代码围栏清理和额度错误转换 |
+| MinerU 结果适配 | `app/services/mineru.py` | Markdown、标题栏表格、技术要求和原始结果保存 |
+| MechVL 上下文编排 | `app/services/ai.py`、`mechvl_server/server.py` | OCR 上下文、图像预览、问题与防编造提示词 |
+| 本地模型代理 | `app/services/model_scheduler.py` | 主应用不直接管理 GPU 进程 |
+| 模型生命周期 | `model_scheduler/scheduler.py` | 互斥、忙碌锁、超时、进程组回收和历史计时 |
+| 数据访问 | `app/repositories/drawings.py` | SQLite 查询与 HTTP/模型逻辑分离 |
+
+OCR 数据流保持一个稳定的输出契约：
+
+```text
+PDF / PNG
+  +-- Qwen3-VL -> 分区 JSON ---------+
+  +-- MinerU -> Markdown/content list +-> 统一 OCR 结构
+                                           +-- SQLite 入库
+                                           +-- 全文检索
+                                           +-- 查看与导出
+                                           +-- MechVL 上下文
+```
+
+这种边界带来的维护性收益包括：
+
+- 新增 OCR 后端只需实现统一结果结构，不需要复制上传、数据库和页面逻辑。
+- 修改 MechVL 提示词不会改变图纸存储、检索或 OCR 代码。
+- 调度器可以独立启动和测试，GPU 生命周期问题不会散落在 FastAPI 路由中。
+- 仓储层可以使用临时数据库测试，避免测试过程修改正式图纸数据。
+- 失败会停留在对应服务边界，并转换为可读错误，不再由一个大函数吞并所有异常。
+
+基准测试每个版本均先预热，再重复执行；导入时间使用 15 个独立进程，路由延迟各采样 500 次。P95 改善仅代表本次样本，普通路由中位数的 0.8%–2.1% 差异不作为性能提升宣传。
+
+结构统计仅包含 Git 管理的业务 Python 文件，不包含虚拟环境、生成文件或第三方模型代码。
 
 ## 核心能力
 
@@ -170,21 +251,12 @@ MinerU2.5 论文还报告了其在多栏、表格、旧扫描件、页眉页脚�
 
 ## 快速开始
 
-已经完成依赖和模型安装时，只需：
-
 ```powershell
 cd C:\path\to\solidcog
 .\start_server.bat
 ```
 
-打开 <http://127.0.0.1:8000/home>。首次使用建议按以下顺序验证：
-
-1. 在“OCR 后端”选择 MinerU 本地或 Qwen3-VL 云端。
-2. 上传一张 PDF/PNG，等待 OCR 与模型切换完成。
-3. 查看 OCR 结果，并用其中的材料或技术要求进行检索。
-4. 选择图纸向 MechVL 提问，观察调度器从 MinerU 切换至 MechVL。
-
-尚未安装环境时，从下一节开始执行。安装仅需一次，之后使用上述启动命令即可。
+打开 <http://127.0.0.1:8000/home>，选择 OCR 后端并上传 PDF/PNG；查看或检索 OCR 后，再选择图纸向 MechVL 提问。尚未安装环境时从下一节开始。
 
 ## 完整安装
 
@@ -211,14 +283,7 @@ RTX 4060 Laptop 8 GB 已验证 MinerU2.5 和 4-bit MechVL 分时运行。MinerU 
 
 ### 一、安装基础软件
 
-在 PowerShell 中确认 Git 和 Python：
-
-```powershell
-git --version
-py -3.12 --version
-```
-
-若命令不存在，请先安装 [Git for Windows](https://git-scm.com/download/win) 和 [Python 3.12](https://www.python.org/downloads/)。安装 Python 时勾选 `Add python.exe to PATH`。
+先安装 [Git for Windows](https://git-scm.com/download/win)、[Python 3.12](https://www.python.org/downloads/) 和最新 [NVIDIA Windows 驱动](https://www.nvidia.com/Download/index.aspx)。安装 Python 时勾选 `Add python.exe to PATH`。
 
 以管理员身份打开 PowerShell，安装 WSL2 Ubuntu：
 
@@ -226,25 +291,19 @@ py -3.12 --version
 wsl --install -d Ubuntu
 ```
 
-按提示重启 Windows，首次打开 Ubuntu 时创建 Linux 用户名和密码。随后在普通 PowerShell 中确认 WSL2：
+按提示重启并创建 Linux 用户。确认发行版使用 WSL2：
 
 ```powershell
 wsl --list --verbose
 ```
 
-`Ubuntu` 的 `VERSION` 应为 `2`。若不是：
-
-```powershell
-wsl --set-version Ubuntu 2
-```
-
-安装最新 [NVIDIA Windows 驱动](https://www.nvidia.com/Download/index.aspx)，然后在 Ubuntu 终端中确认 WSL2 可以访问显卡：
+随后在 Ubuntu 中确认 GPU：
 
 ```bash
 nvidia-smi
 ```
 
-这里必须显示 NVIDIA GPU。不要在 WSL2 内另外安装 Linux NVIDIA 显卡驱动。
+必须显示 NVIDIA GPU；不要在 WSL2 内另装 Linux NVIDIA 驱动。
 
 ### 二、克隆仓库并安装主程序
 
@@ -257,14 +316,6 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
-
-验证主程序依赖：
-
-```powershell
-.\.venv\Scripts\python.exe -c "import fastapi, pypdfium2, openai, PIL; print('SolidCog dependencies OK')"
-```
-
-预期输出为 `SolidCog dependencies OK`。
 
 ### 三、配置 Qwen3-VL-Plus
 
@@ -306,21 +357,7 @@ wsl.exe -d Ubuntu -- bash -lc "~/.local/share/solidcog/mineru/.venv/bin/pip inst
 wsl.exe -d Ubuntu -- bash -lc "cd '$repoWsl/model_scheduler' && bash setup.sh"
 ```
 
-三个环境相互独立：`mechvl_server/.venv` 运行 MechVL，`~/.local/share/solidcog/mineru/.venv` 运行 MinerU，`model_scheduler/.venv` 只运行轻量调度服务。安装可能持续较长时间。
-
-首次点击“MinerU OCR”时自动下载约 2.2 GB 的 MinerU2.5 模型。也可以用真实图纸提前触发下载：
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc "~/.local/share/solidcog/mineru/.venv/bin/mineru -p '$repoWsl/sample.png' -o /tmp/mineru-smoke -b vlm-engine"
-```
-
-下载完成后检查模型缓存：
-
-```powershell
-wsl.exe -d Ubuntu -- bash -lc "du -sh ~/.cache/huggingface/hub/models--XiaofengAlg--MechVL-4B-RL"
-```
-
-若下载中断，重新执行 `download_model.sh` 即可续传。
+三个环境相互独立。首次使用 MinerU 时会自动下载约 2.2 GB 模型；MechVL 下载中断时重新执行 `download_model.sh` 即可续传。
 
 ### 五、启动 SolidCog
 
@@ -330,13 +367,7 @@ wsl.exe -d Ubuntu -- bash -lc "du -sh ~/.cache/huggingface/hub/models--XiaofengA
 .\start_server.bat
 ```
 
-检查主服务：
-
-```powershell
-curl.exe --noproxy "*" http://127.0.0.1:8000/
-```
-
-然后打开：
+启动后打开：
 
 - 工作台：<http://127.0.0.1:8000/home>
 - 主服务 API：<http://127.0.0.1:8000/docs>
@@ -346,15 +377,9 @@ curl.exe --noproxy "*" http://127.0.0.1:8000/
 
 ## 完整流程验证
 
-1. 打开工作台，在 OCR 后端选择“MinerU 本地”。
-2. 上传一张清晰的 PDF 或 PNG，观察 MinerU 切换计时器并等待 OCR 完成。
-3. 点击“查看 OCR”，确认标题栏、技术要求或完整文字已有内容。
-4. 返回工作台，输入刚识别出的文字，确认能检索到该图纸。
-5. 在问答区选择图纸并提问，系统会自动停止 MinerU、释放显存并加载 MechVL。
-6. 确认转换器显示 MechVL 已就绪并得到回答。
-7. 将 OCR 后端改为 Qwen3-VL，上传另一张图纸，确认本地 GPU 模式不变。
-
-完成以上七步即表示 DashScope OCR、SQLite、文件存储、全文检索和 MechVL 本地问答链路均正常。
+1. 选择 MinerU，上传 PDF/PNG，确认标题栏、技术要求和全文已写入。
+2. 使用识别文字检索图纸，再选择图纸向 MechVL 提问，确认模型自动互斥切换。
+3. 改用 Qwen3-VL 上传另一张图纸，确认云端 OCR 不改变当前本地 GPU 模式。
 
 ### 日常启动
 
@@ -441,57 +466,6 @@ solidcog/
 - MechVL 问答在本机 WSL2 中执行，不调用外部聊天模型。
 
 上述本地文件均已被 Git 忽略。备份或迁移时应同时复制 `database.db` 与 `uploads/`。
-
-## 常见问题
-
-### `wsl` 不可用或没有 Ubuntu
-
-以管理员身份执行 `wsl --install -d Ubuntu` 并重启。确认 `wsl --list --verbose` 中发行版名称为 `Ubuntu`；启动脚本当前使用这个名称。
-
-### WSL2 中 `nvidia-smi` 失败
-
-更新 Windows NVIDIA 驱动，然后执行：
-
-```powershell
-wsl --update
-wsl --shutdown
-```
-
-重新打开 Ubuntu 后再运行 `nvidia-smi`。不要在 WSL2 中安装 Linux 内核显卡驱动。
-
-### MechVL 报 CUDA out of memory
-
-关闭其他占用显存的应用，执行 `wsl --shutdown` 后重启。可在 WSL2 中用 `watch -n 1 nvidia-smi` 查看显存。当前服务已使用 4-bit 量化；低于 8 GB 显存不属于支持配置。
-
-### `/health` 打不开或主程序无法连接 MechVL
-
-确认终端 A 仍在运行，并等待模型加载完成：
-
-```powershell
-curl.exe --noproxy "*" http://127.0.0.1:8100/health
-```
-
-SolidCog 访问 MechVL 时会忽略系统代理。若浏览器仍走代理，请为 `127.0.0.1` 和 `localhost` 设置例外。
-
-### MechVL 分析超时
-
-默认超时 600 秒。先确认 GPU 没有被其他程序占满，再尝试分辨率更低的图纸。需要延长时修改 `.env` 中的 `MECHVL_TIMEOUT_SECONDS` 并重启 SolidCog。
-
-### OCR 提示 Key 无效、无额度或请求频繁
-
-检查 Key、地域地址和 DashScope 控制台模型权限。若启用了“仅使用免费额度”，额度耗尽后需要关闭该限制或充值。修改 `.env` 后重启 SolidCog。
-
-### 搜索不到已有图纸
-
-搜索基于文件名和数据库中已有的 OCR 文本。早期导入但 OCR 字段为空的记录无法按内容搜索，需要重新上传并完成 OCR。
-
-### 端口被占用
-
-```powershell
-Get-NetTCPConnection -LocalPort 8000,8090,8100,8200 -ErrorAction SilentlyContinue
-```
-
-停止占用进程，或同步修改启动脚本与 `.env` 中对应端口。
 
 ## 论文引用
 
