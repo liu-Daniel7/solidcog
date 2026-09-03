@@ -1,13 +1,14 @@
-from fastapi import APIRouter, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from app.repositories import drawings as repository
+from app.security import verify_local_request
 from app.services import drawings as service
 
 router = APIRouter()
 
 
-@router.post("/upload-drawing")
+@router.post("/upload-drawing", dependencies=[Depends(verify_local_request)])
 def upload(
     request: Request,
     files: list[UploadFile] = File(...),
@@ -30,19 +31,19 @@ def list_drawings():
     return {"图纸数量": len(drawings), "图纸信息": drawings}
 
 
-@router.delete("/drawings/{drawing_id}")
+@router.delete("/drawings/{drawing_id}", dependencies=[Depends(verify_local_request)])
 def delete_drawing(drawing_id: int):
     service.delete(drawing_id)
-    return RedirectResponse("/home", 303)
+    return {"success": True, "deleted_id": drawing_id}
 
 
-@router.get("/delete-drawing/{drawing_id}")
+@router.post("/delete-drawing/{drawing_id}", dependencies=[Depends(verify_local_request)])
 def delete_drawing_from_page(drawing_id: int):
     service.delete(drawing_id)
     return RedirectResponse("/home", 303)
 
 
-@router.get("/delete-all-drawings")
+@router.post("/delete-all-drawings", dependencies=[Depends(verify_local_request)])
 def delete_all_drawings():
     service.delete_all()
     return RedirectResponse("/home", 303)

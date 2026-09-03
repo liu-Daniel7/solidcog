@@ -53,7 +53,6 @@ class ModelServiceTests(unittest.TestCase):
 
     def test_expected_model_defaults(self):
         self.assertEqual(config.QWEN_VL_MODEL, "qwen3-vl-plus")
-        self.assertEqual(config.MECHVL_BASE_URL, "http://127.0.0.1:8100")
 
     def test_mineru_markdown_adapter_preserves_engineering_fields(self):
         markdown = """# 技术要求

@@ -27,6 +27,13 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
     if size > config.MAX_FILE_SIZE:
         raise HTTPException(400, f"文件过大，最大允许 50MB，{original_name} 超过限制")
 
+    header = file.file.read(8)
+    file.file.seek(0)
+    if extension == ".pdf" and not header.startswith(b"%PDF"):
+        raise HTTPException(400, f"{original_name} 内容不是有效的 PDF 文件")
+    if extension == ".png" and header[:8] != b"\x89PNG\r\n\x1a\n":
+        raise HTTPException(400, f"{original_name} 内容不是有效的 PNG 图片")
+
     safe_name = "".join(char for char in original_name if char.isalnum() or char in "_-." )
     filename = f"{datetime.now():%Y%m%d%H%M%S_%f}_{safe_name}"
     path = config.UPLOAD_DIR / filename
@@ -53,6 +60,7 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
             "original_filename": original_name,
             "file_size": size,
             "ocr_backend": result.get("backend", ocr_backend),
+            "page_errors": result.get("page_errors") or [],
         }
     except Exception:
         path.unlink(missing_ok=True)
