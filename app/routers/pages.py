@@ -19,7 +19,7 @@ def status():
 
 @router.get("/home", response_class=HTMLResponse)
 def home(request: Request):
-    rows = template_rows(repository.list_all("ASC"))
+    rows = template_rows(repository.list_all("DESC"))
     return templates.TemplateResponse(request, "index.html", {"图纸列表": rows, "drawings": rows})
 
 

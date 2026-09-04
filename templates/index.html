@@ -1294,7 +1294,7 @@
                                         <div class="action-group">
                                             <a class="text-link" href="/view-ocr/{{ d[5] }}">查看 OCR</a>
                                             <a class="text-link" href="/export-ocr/{{ d[5] }}">导出 OCR</a>
-                                            <a class="text-link delete-link" href="/delete-drawing/{{ d[5] }}" onclick="return confirm('确定要删除这个图纸吗？')">删除</a>
+                                            <a class="text-link delete-link" href="/delete-drawing/{{ d[5] }}" onclick="return confirmDelete(event, this.href)">删除</a>
                                         </div>
                                     </td>
                                 </tr>
@@ -1912,9 +1912,32 @@
             }, 3000);
         });
 
+        async function postAndReload(url) {
+            try {
+                const response = await fetch(url, { method: 'POST' });
+                if (response.ok) {
+                    window.location.href = '/home';
+                    return;
+                }
+                alert('操作失败（HTTP ' + response.status + '），请重试');
+            } catch (error) {
+                alert('操作失败：网络错误，请重试');
+            }
+        }
+
+        function confirmDelete(event, url) {
+            if (!confirm('确定要删除这个图纸吗？')) {
+                event.preventDefault();
+                return false;
+            }
+            event.preventDefault();
+            postAndReload(url);
+            return false;
+        }
+
         function deleteAllDrawings() {
             if (confirm('确定要删除所有图纸吗？此操作不可恢复。')) {
-                window.location.href = '/delete-all-drawings';
+                postAndReload('/delete-all-drawings');
             }
         }
     </script>

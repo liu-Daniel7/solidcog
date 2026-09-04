@@ -10,19 +10,23 @@ def _dict(row):
     return dict(row) if row else None
 
 
+# 与 database.py 中 CREATE TABLE 的列一致；INSERT 列名只在此声明一次，
+# 避免日后加列时 SQL 与参数元组错位。
+CREATE_COLUMNS = (
+    "filename", "file_type", "file_size", "upload_time",
+    "title_text", "tech_text", "all_text", "layout",
+)
+
+
 def create(data: dict) -> int:
     with closing(connect()) as connection:
         with connection:
             cursor = connection.execute(
-                """
-                INSERT INTO drawings
-                    (filename, file_type, file_size, upload_time, title_text, tech_text, all_text, layout)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                f"""
+                INSERT INTO drawings ({", ".join(CREATE_COLUMNS)})
+                VALUES ({", ".join("?" for _ in CREATE_COLUMNS)})
                 """,
-                tuple(data[key] for key in (
-                    "filename", "file_type", "file_size", "upload_time",
-                    "title_text", "tech_text", "all_text", "layout"
-                )),
+                tuple(data[key] for key in CREATE_COLUMNS),
             )
             return cursor.lastrowid
 

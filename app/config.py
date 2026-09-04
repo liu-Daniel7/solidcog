@@ -31,7 +31,6 @@ QWEN_BASE_URL = os.getenv(
 )
 QWEN_VL_MODEL = os.getenv("QWEN_VL_MODEL", "qwen3-vl-plus")
 QWEN_OCR_MAX_PAGES = max(1, int(os.getenv("QWEN_OCR_MAX_PAGES", "10")))
-MECHVL_BASE_URL = os.getenv("MECHVL_BASE_URL", "http://127.0.0.1:8100").rstrip("/")
 MECHVL_TIMEOUT_SECONDS = max(1, int(os.getenv("MECHVL_TIMEOUT_SECONDS", "180")))
 MODEL_SCHEDULER_BASE_URL = os.getenv(
     "MODEL_SCHEDULER_BASE_URL", "http://127.0.0.1:8090"

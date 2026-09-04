@@ -56,6 +56,28 @@ class RouteTests(unittest.TestCase):
         self.assertTrue(drawings.delete(record_id))
         self.assertIsNone(drawings.get(record_id))
 
+    def test_cross_origin_write_rejected(self):
+        self.create_record("a.pdf")
+        response = self.client.post(
+            "/delete-all-drawings",
+            headers={"origin": "https://evil.example"},
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(self.client.get("/drawings").json()["图纸数量"], 1)
+
+    def test_local_origin_write_allowed(self):
+        self.create_record("a.pdf")
+        response = self.client.post(
+            "/delete-all-drawings",
+            headers={"origin": "http://127.0.0.1:8000"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(self.client.get("/drawings").json()["图纸数量"], 0)
+
+    def test_delete_endpoints_no_longer_get(self):
+        self.assertEqual(self.client.get("/delete-all-drawings").status_code, 405)
+        self.assertEqual(self.client.get("/delete-drawing/1").status_code, 405)
+
     def test_local_model_routes(self):
         ready = {"state": "mineru_ready", "current_mode": "mineru"}
         with patch.object(model_scheduler, "status", return_value=ready):

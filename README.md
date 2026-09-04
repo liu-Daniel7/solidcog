@@ -340,7 +340,7 @@ nvidia-smi
 以下命令均在普通 PowerShell 中执行：
 
 ```powershell
-git clone --branch branch_test https://github.com/liu-Daniel7/solidcog.git
+git clone https://github.com/liu-Daniel7/solidcog.git
 cd solidcog
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
@@ -363,7 +363,6 @@ QWEN_API_KEY=replace-with-your-qwen-api-key
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 QWEN_VL_MODEL=qwen3-vl-plus
 QWEN_OCR_MAX_PAGES=10
-MECHVL_BASE_URL=http://127.0.0.1:8100
 MECHVL_TIMEOUT_SECONDS=600
 MECHVL_STARTUP_TIMEOUT=900
 MODEL_SCHEDULER_BASE_URL=http://127.0.0.1:8090
