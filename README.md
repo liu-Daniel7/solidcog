@@ -557,3 +557,14 @@ SolidCog 使用 [MechVL-4B-RL](https://huggingface.co/XiaofengAlg/MechVL-4B-RL)
 使用 MechVL-4B-RL 时请引用其论文：*MechVQA: Benchmarking and Enhancing
 Multimodal LLMs on Comprehensive Mechanical Drawing Understanding*（2026）。
 DashScope API、Qwen 模型和其他第三方依赖仍分别遵循其自身许可证与服务条款。
+
+## macOS / Apple Silicon 版本
+
+macOS 平台代码位于 `platforms/macos/`，与原 Windows/WSL 文件（`.bat`、`model_scheduler/`、`mechvl_server/`）隔离。业务层 `app/` 保持共享。
+
+```bash
+./platforms/macos/setup.sh  # 首次安装，使用 Python 3.12
+./start_macos.command       # 同时启动 macOS 模型调度器和主应用
+```
+
+macOS 调度器通过 llama.cpp + Metal 按需互斥加载 MinerU 或 MechVL，避免在 Apple Silicon 统一内存中同时驻留两个模型。详细配置见 `platforms/macos/README.md` 和 `.env.example`。
