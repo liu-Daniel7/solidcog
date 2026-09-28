@@ -3,12 +3,12 @@
 > 面向机械工程图纸的本地智能解析、检索与审核工作台
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-2ea44f)](LICENSE)
-[![Platform](https://img.shields.io/badge/platform-Windows%20%2B%20WSL2-0078d4)](#完整安装)
+[![Platform](https://img.shields.io/badge/platform-Windows%20%2B%20WSL2%20%7C%20macOS%20%2B%20Metal-0078d4)](#平台与安装)
 [![GPU](https://img.shields.io/badge/GPU-RTX%204060%208GB%20verified-76b900)](#性能与证据)
 [![OCR](https://img.shields.io/badge/OCR-MinerU2.5--Pro%20%7C%20Qwen3--VL-0ea5e9)](#mineru-文档解析能力)
 [![Review](https://img.shields.io/badge/review-MechVL--4B--RL-111827)](#mechvl-机械图纸理解能力)
 
-[核心能力](#核心能力) · [技术创新](#技术创新) · [模型依据](#mineru-文档解析能力) · [性能实测](#性能与证据) · [系统架构](#系统架构) · [快速开始](#快速开始) · [完整安装](#完整安装) · [论文引用](#论文引用)
+[核心能力](#核心能力) · [技术创新](#技术创新) · [模型依据](#mineru-文档解析能力) · [性能实测](#性能与证据) · [系统架构](#系统架构) · [平台与安装](#平台与安装) · [快速开始](#快速开始) · [论文引用](#论文引用)
 
 ---
 
@@ -24,8 +24,10 @@ SolidCog 将通用文档解析模型 `MinerU2.5-Pro`、机械图纸多模态模�
 - [MechVL 机械图纸理解能力](#mechvl-机械图纸理解能力)
 - [性能与证据](#性能与证据)
 - [系统架构](#系统架构)
+- [平台与安装](#平台与安装)
 - [快速开始](#快速开始)
-- [完整安装](#完整安装)
+- [Windows/WSL2 安装](#windowswsl2-安装)
+- [macOS / Apple Silicon 安装](#macos--apple-silicon-安装)
 - [完整流程验证](#完整流程验证)
 - [本地模型调度器](#本地模型调度器)
 - [开发者参考](#开发者参考)
@@ -278,6 +280,18 @@ MinerU2.5 论文还报告了其在多栏、表格、旧扫描件、页眉页脚�
 ```
 
 `start_server.bat` 会自动启动轻量调度器。调度器默认不加载 GPU 模型，用户选择模式或执行 OCR/问答时才加载目标模型；当前模型会保持驻留到下一次切换。
+
+## 平台与安装
+
+SolidCog 采用“跨平台核心 + 平台运行时”结构：图纸管理、上传、OCR 任务、进度查询、数据库和 Web 界面由 `app/` 与 `templates/` 共享；操作系统差异只集中在模型进程、GPU 后端、依赖和启动脚本。
+
+| 平台 | 模型后端 | 启动入口 | 适用场景 |
+| --- | --- | --- | --- |
+| Windows + WSL2 | CUDA / WSL2 | `start_server.bat` | NVIDIA GPU，本地 MinerU 与 MechVL |
+| macOS + Apple Silicon | llama.cpp / Metal | `./start_macos.command` | Apple Silicon，本地 Metal 推理 |
+| 任意平台 | DashScope Qwen3-VL | 启动主应用后选择 Qwen | 无本地 GPU 或使用云端 OCR |
+
+两个平台提供相同的图纸管理、OCR 结果、异步任务进度和 Web 界面。只有模型启动方式和 GPU 参数不同。跨平台功能应合并到 `main`；平台专属代码分别放在 `platforms/macos/` 或 Windows/WSL 运行时目录中。
 
 ## 快速开始
 
@@ -544,6 +558,65 @@ BibTeX 使用 `and others` 压缩超长作者列表；正式投稿时可从对�
   year    = {2026}
 }
 ```
+
+## macOS / Apple Silicon 安装
+
+macOS 版本支持 Apple Silicon（M 系列芯片），使用 llama.cpp 的 Metal 后端运行本地 MinerU 与 MechVL。平台代码位于 `platforms/macos/`，跨平台业务与 Windows 共用。
+
+### 运行要求
+
+- macOS + Apple Silicon（M1/M2/M3/M4 系列）
+- Python 3.12
+- Homebrew（推荐，用于安装 `llama.cpp`）
+- 足够的统一内存和磁盘空间存放模型
+- 如果使用 Qwen 云端 OCR，需要 DashScope API Key
+
+### 首次安装
+
+```bash
+cd "/path/to/SolidCog for mac"
+
+# 尚未安装时安装 Python 3.12 和 llama-server
+brew install python@3.12 llama.cpp
+
+# 创建虚拟环境并安装 macOS 依赖
+./platforms/macos/setup.sh
+
+# 配置 llama-server 路径
+cp .env.example .env
+echo "LLAMA_SERVER_PATH=$(which llama-server)" >> .env
+```
+
+如果 `which llama-server` 没有输出，请执行：
+
+```bash
+find "$(brew --prefix llama.cpp)" -name llama-server -type f
+```
+
+然后将实际路径写入 `.env`：
+
+```env
+LLAMA_SERVER_PATH=/opt/homebrew/bin/llama-server
+```
+
+### 启动
+
+```bash
+./start_macos.command
+```
+
+然后打开 <http://127.0.0.1:8000/home>。停止服务时，在终端按 `Control + C`。调度器状态可通过 <http://127.0.0.1:8090/health> 检查。
+
+macOS 调度器按需互斥加载 MinerU 或 MechVL，避免两个模型同时占用 Apple Silicon 统一内存。模型文件默认位于：
+
+```text
+models/mineru/mineru-text-q8.gguf
+models/mineru/mineru-vision-f16.gguf
+models/mechvl/mechvl-model-q5.gguf
+models/mechvl/mechvl-vision-f16.gguf
+```
+
+更多配置见 [`platforms/macos/README.md`](platforms/macos/README.md) 和 [`.env.example`](.env.example)。
 
 ## 许可证
 
