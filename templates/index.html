@@ -1207,6 +1207,7 @@
                                 </div>
                                 <div style="margin-top: 14px;">
                                     <button id="upload-btn" class="button button-primary" type="submit">上传图纸</button>
+                                    <div id="upload-progress" class="upload-help" role="status" aria-live="polite"></div>
                                 </div>
                             </form>
                         </div>
@@ -1366,6 +1367,9 @@
             let restoringChatState = false;
             let schedulerSnapshot = null;
             let schedulerSyncedAt = performance.now();
+            let modelSwitchInFlight = false;
+            let uploadInFlight = false;
+            let chatInFlight = false;
 
             const stageLabels = {
                 queued: '正在排队',
@@ -1443,6 +1447,8 @@
             }
 
             async function switchModel(mode) {
+                if (modelSwitchInFlight) return;
+                modelSwitchInFlight = true;
                 modeButtons.forEach(function (button) { button.disabled = true; });
                 try {
                     const response = await fetch(`/local-model/switch/${mode}`, { method: 'POST' });
@@ -1456,6 +1462,9 @@
                     modelStateLabel.textContent = '无法切换模型';
                     modelStateDetail.textContent = error.message;
                     await syncModelStatus();
+                } finally {
+                    modelSwitchInFlight = false;
+                    renderModelStatus();
                 }
             }
 
@@ -1745,24 +1754,20 @@
                     formData.append('files', file);
                     formData.append('ocr_backend', uploadOcrBackend.value);
 
-                    fetch('/upload-drawing', {
+                    fetch('/upload-drawing-async', {
                         method: 'POST',
                         headers: { 'Accept': 'application/json' },
                         body: formData
                     })
                         .then(async function (response) {
-                            const data = await response.json().catch(function () { return null; });
-                            if (response.ok && data && data.success) {
-                                addMessage(`文件上传成功：${file.name}`, 'bot');
-                                const uploadedFile = data.files && data.files[0];
-                                if (uploadedFile && uploadedFile.id) {
-                                    selectDrawing(uploadedFile.id, uploadedFile.filename || file.name);
-                                } else {
-                                    addMessage('文件已上传，但没有返回图纸 ID。请从图纸列表中选择该图纸后再提问。', 'bot');
-                                }
+                            const data = await response.json().catch(function () { return {}; });
+                            if (!response.ok || !data.success) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+                            const result = await pollUploadJob(data.job.job_id, { textContent: '' });
+                            if (result.results && result.results[0] && result.results[0].id) {
+                                addMessage(`文件处理完成：${file.name}`, 'bot');
+                                selectDrawing(result.results[0].id, result.results[0].filename || file.name);
                             } else {
-                                const message = data && (data.detail || data.message || data.error);
-                                addMessage(`文件上传失败：${message || `HTTP ${response.status}`}`, 'bot');
+                                addMessage(`文件处理失败：${result.errors?.[0]?.error || '未返回图纸 ID'}`, 'bot');
                             }
                         })
                         .catch(function (error) {
@@ -1774,13 +1779,20 @@
 
             function sendMessage() {
                 const message = chatInput.value.trim();
-                if (!message) return;
+                if (!message || chatInFlight) return;
+                if (selectedDrawingId === null) {
+                    addMessage('请先选择一张图纸，再使用 MechVL 提问。', 'bot', false, messageMeta('需要图纸'));
+                    return;
+                }
+                chatInFlight = true;
+                sendBtn.disabled = true;
+                chatInput.disabled = true;
                 const requestStartedAt = performance.now();
                 addMessage(message, 'user', false, messageMeta('发送'));
                 chatInput.value = '';
                 addMessage('正在思考...', 'bot', true, messageMeta('请求'));
 
-                if (selectedDrawingId !== null) {
+                {
                     setTimeout(syncModelStatus, 500);
                     fetch('/chat-with-drawing', {
                         method: 'POST',
@@ -1790,8 +1802,9 @@
                             drawing_id: selectedDrawingId
                         })
                     })
-                        .then(function (response) { return response.json(); })
-                        .then(function (data) {
+                        .then(async function (response) {
+                            const data = await response.json().catch(function () { return {}; });
+                            if (!response.ok) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
                             removeLoadingMessage();
                             if (data.success) {
                                 addMessage(data.answer, 'bot', false, messageMeta('回复', requestStartedAt));
@@ -1801,14 +1814,18 @@
                         })
                         .catch(function (error) {
                             removeLoadingMessage();
-                            addMessage('出现了错误，请稍后再试。', 'bot', false, messageMeta('失败', requestStartedAt));
+                            addMessage(`分析失败：${error.message || '请稍后再试'}`, 'bot', false, messageMeta('失败', requestStartedAt));
                             console.error('Chat with drawing error:', error);
+                        })
+                        .finally(function () {
+                            chatInFlight = false;
+                            sendBtn.disabled = false;
+                            chatInput.disabled = false;
+                            chatInput.focus();
+                            syncModelStatus();
                         });
                     return;
                 }
-
-                removeLoadingMessage();
-                addMessage('请先选择一张图纸，再使用 MechVL 提问。', 'bot', false, messageMeta('需要图纸', requestStartedAt));
             }
 
             function addMessage(text, sender, isLoading, metaText) {
@@ -1864,27 +1881,48 @@
             });
             uploadForm.addEventListener('submit', async function (event) {
                 event.preventDefault();
+                if (uploadInFlight) return;
+                const fileInput = document.getElementById('files');
+                const progress = document.getElementById('upload-progress');
+                if (!fileInput.files.length) return;
+                uploadInFlight = true;
                 uploadBtn.disabled = true;
-                uploadBtn.textContent = uploadOcrBackend.value === 'mineru' ? '正在准备 MinerU' : '正在调用 Qwen3-VL';
-                setTimeout(syncModelStatus, 500);
+                uploadBtn.textContent = '已加入 OCR 队列';
+                progress.textContent = '正在上传文件并创建任务…';
                 try {
-                    const response = await fetch('/upload-drawing', {
-                        method: 'POST',
-                        headers: { 'Accept': 'application/json' },
+                    const response = await fetch('/upload-drawing-async', {
+                        method: 'POST', headers: { 'Accept': 'application/json' },
                         body: new FormData(uploadForm)
                     });
                     const data = await response.json().catch(function () { return {}; });
                     if (!response.ok || !data.success) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
-                    uploadBtn.textContent = '上传完成';
+                    const jobId = data.job.job_id;
+                    await pollUploadJob(jobId, progress);
+                    uploadBtn.textContent = '处理完成';
+                    progress.textContent = '图纸已处理完成，正在刷新列表…';
                     window.location.reload();
                 } catch (error) {
                     uploadBtn.disabled = false;
                     uploadBtn.textContent = '重新上传';
-                    modelState.dataset.tone = 'error';
-                    modelStateLabel.textContent = '图纸上传失败';
-                    modelStateDetail.textContent = error.message;
+                    progress.textContent = `上传任务失败：${error.message}`;
+                } finally {
+                    uploadInFlight = false;
                 }
             });
+
+            async function pollUploadJob(jobId, progress) {
+                while (true) {
+                    const response = await fetch(`/upload-jobs/${encodeURIComponent(jobId)}`, { headers: { 'Accept': 'application/json' } });
+                    const data = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+                    progress.textContent = `${data.status === 'queued' ? '排队中' : '处理中'}：${data.completed}/${data.total}（${data.progress}%）${data.current_file ? ` · ${data.current_file}` : ''}`;
+                    if (['completed', 'partial', 'failed'].includes(data.status)) {
+                        if (data.status === 'failed') throw new Error(data.errors?.[0]?.error || '全部文件处理失败');
+                        return data;
+                    }
+                    await new Promise(function (resolve) { setTimeout(resolve, 1500); });
+                }
+            }
             clearDrawingBtn.addEventListener('click', clearSelectedDrawing);
             clearChatBtn.addEventListener('click', clearChatHistory);
             closeDrawingModal.addEventListener('click', closeDrawingModalFunc);

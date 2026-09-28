@@ -1,9 +1,12 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, RedirectResponse
 
+from app import config
+
 from app.repositories import drawings as repository
 from app.security import verify_local_request
 from app.services import drawings as service
+from app.services import jobs
 
 router = APIRouter()
 
@@ -16,12 +19,24 @@ def upload(
 ):
     if not files:
         raise HTTPException(400, "请选择至少一个文件")
+    if len(files) > config.MAX_BATCH_UPLOADS:
+        raise HTTPException(413, f"单次最多上传 {config.MAX_BATCH_UPLOADS} 个文件")
     if ocr_backend not in {"qwen", "mineru"}:
         raise HTTPException(400, "OCR 后端必须是 qwen 或 mineru")
     uploaded = [service.save_upload(file, ocr_backend) for file in files]
     if "application/json" in request.headers.get("accept", ""):
         return JSONResponse({"success": True, "files": uploaded})
     return RedirectResponse("/home", 303)
+
+
+@router.post("/upload-drawing-async", dependencies=[Depends(verify_local_request)])
+def upload_async(files: list[UploadFile] = File(...), ocr_backend: str = Form("qwen")):
+    return {"success": True, "job": jobs.create(files, ocr_backend)}
+
+
+@router.get("/upload-jobs/{job_id}")
+def upload_job_status(job_id: str):
+    return jobs.get(job_id)
 
 
 @router.get("/drawings")

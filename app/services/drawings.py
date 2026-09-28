@@ -1,4 +1,5 @@
 import shutil
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -7,6 +8,12 @@ from fastapi import HTTPException, UploadFile
 from app import config
 from app.repositories import drawings as repository
 from app.services.ocr import run_ocr
+
+
+# OCR/model calls are expensive and share one local GPU/model scheduler.
+# Bound admission at the application process so concurrent browser requests do
+# not create an unbounded thread backlog or race the model lifecycle.
+_OCR_GATE = threading.BoundedSemaphore(config.MAX_CONCURRENT_OCR)
 
 
 def template_rows(rows: list[dict]) -> list[tuple]:
@@ -37,6 +44,9 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
     safe_name = "".join(char for char in original_name if char.isalnum() or char in "_-." )
     filename = f"{datetime.now():%Y%m%d%H%M%S_%f}_{safe_name}"
     path = config.UPLOAD_DIR / filename
+    acquired = _OCR_GATE.acquire(blocking=False)
+    if not acquired:
+        raise HTTPException(429, "当前已有图纸正在进行 OCR，请稍后重试", headers={"Retry-After": "15"})
     try:
         with path.open("wb") as destination:
             shutil.copyfileobj(file.file, destination)
@@ -65,6 +75,8 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
     except Exception:
         path.unlink(missing_ok=True)
         raise
+    finally:
+        _OCR_GATE.release()
 
 
 def delete(drawing_id: int) -> None:

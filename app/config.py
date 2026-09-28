@@ -40,6 +40,11 @@ MINERU_TIMEOUT_SECONDS = max(1, int(os.getenv("MINERU_TIMEOUT_SECONDS", "600")))
 MINERU_RESULT_DIR = Path(
     os.getenv("MINERU_RESULT_DIR", BASE_DIR / "mineru_results")
 ).resolve()
+# Admission control for expensive, process-wide model work. The model scheduler
+# already serializes GPU switching; this limit also protects the API worker from
+# accepting an unbounded number of OCR requests under concurrent uploads.
+MAX_CONCURRENT_OCR = max(1, int(os.getenv("MAX_CONCURRENT_OCR", "1")))
+MAX_BATCH_UPLOADS = max(1, int(os.getenv("MAX_BATCH_UPLOADS", "20")))
 PLACEHOLDER_VALUES = {
     "replace-with-your-qwen-api-key",
     "your-qwen-api-key",
