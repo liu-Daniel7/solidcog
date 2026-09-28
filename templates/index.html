@@ -132,7 +132,9 @@
                         </div>
                         <div class="chat-toolbar">
                             <button id="select-drawing-btn" class="button button-secondary" type="button">选择图纸</button>
-                            <button id="clear-drawing-btn" class="button button-secondary" type="button" disabled aria-disabled="true">取消选择</button>
+                            <button id="clear-drawing-btn" class="button button-secondary icon-action" type="button" disabled aria-disabled="true" aria-label="取消选择" title="取消选择">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
+                            </button>
                             <button id="clear-chat-btn" class="icon-button" type="button" aria-label="清理聊天记录" title="清理聊天记录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg></button>
                             <span id="selected-drawing-name" class="selected-file" aria-live="polite"></span>
                         </div>
@@ -578,7 +580,6 @@
                 updateDrawingSelectionState();
                 chatInput.placeholder = '输入你的问题，例如：这张图纸的关键技术要求是什么？';
                 chatInput.focus();
-                addMessage('已取消当前图纸选择。你可以重新点击“选择图纸”，或直接拖入另一张图纸。', 'bot');
             }
 
             function findDrawingByFilename(filename) {
