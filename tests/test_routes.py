@@ -36,6 +36,17 @@ class RouteTests(unittest.TestCase):
             "tech_text": "技术要求", "all_text": "全文", "layout": "horizontal",
         })
 
+    def test_workbench_layout_and_controls(self):
+        response = self.client.get("/home")
+        self.assertEqual(response.status_code, 200)
+        html = response.text
+        self.assertNotIn('>MechVL 本地</span>', html)
+        self.assertIn('grid-template-columns: repeat(3, minmax(0, 1fr))', html)
+        self.assertIn('aria-label="搜索关键词"', html)
+        self.assertNotIn("{% include", html)
+        for control in ("upload-form", "select-drawing-btn", "clear-drawing-btn", "send-btn"):
+            self.assertIn(f'id="{control}"', html)
+
     def test_core_routes(self):
         record_id = self.create_record()
         self.assertEqual(self.client.get("/").status_code, 200)
