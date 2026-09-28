@@ -41,7 +41,11 @@ class RouteTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         html = response.text
         self.assertNotIn('>MechVL 本地</span>', html)
-        self.assertIn('grid-template-columns: repeat(3, minmax(0, 1fr))', html)
+        self.assertIn('class="button button-primary icon-action"', html)
+        self.assertIn('aria-label="搜索图纸"', html)
+        self.assertIn('aria-label="上传图纸"', html)
+        self.assertIn('aria-label="发送问题"', html)
+        self.assertNotIn('已载入图纸：', html)
         self.assertIn('aria-label="搜索关键词"', html)
         self.assertNotIn("{% include", html)
         for control in ("upload-form", "select-drawing-btn", "clear-drawing-btn", "send-btn"):

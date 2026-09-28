@@ -376,7 +376,7 @@
 
         .form-row {
             display: grid;
-            grid-template-columns: repeat(3, minmax(0, 1fr));
+            grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 44px;
             gap: 8px;
             align-items: center;
         }
@@ -428,6 +428,17 @@
             white-space: nowrap;
             transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease;
             font-size: 14px;
+        }
+
+        .icon-action {
+            width: 44px;
+            min-width: 44px;
+            padding: 0;
+        }
+
+        .icon-action svg {
+            width: 19px;
+            height: 19px;
         }
 
         .button:hover {
@@ -763,7 +774,7 @@
 
         .chat-input-row {
             display: grid;
-            grid-template-columns: minmax(0, 1fr) auto;
+            grid-template-columns: minmax(0, 1fr) 44px;
             gap: 10px;
         }
 
@@ -1071,6 +1082,16 @@
                 width: 100%;
             }
 
+            .icon-action,
+            .form-row > .icon-action {
+                width: 44px;
+                min-width: 44px;
+            }
+
+            .chat-input-row {
+                grid-template-columns: minmax(0, 1fr) 44px;
+            }
+
             .chat-toolbar { grid-template-columns: auto auto 36px; }
             .selected-file { grid-column: 1 / -1; text-align: left; }
 
@@ -1109,6 +1130,7 @@
         }
 
         .form-row > * { width: 100%; min-width: 0; height: 44px; }
+        .form-row > .icon-action { width: 44px; min-width: 44px; }
         .chat-toolbar .button { min-height: 36px; height: 36px; font-size: 13px; }
         .field[type="file"] { height: auto; overflow: hidden; padding: 8px; font-size: 12px; }
         .field::file-selector-button { border: 0; border-radius: 6px; padding: 6px 10px; margin-right: 8px; background: var(--surface); color: var(--ink); cursor: pointer; }

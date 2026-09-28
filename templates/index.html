@@ -91,7 +91,9 @@
                                     <option value="desc" {% if current_sort == 'desc' %}selected{% endif %}>时间最新</option>
                                     <option value="asc" {% if current_sort == 'asc' %}selected{% endif %}>时间最早</option>
                                 </select>
-                                <button class="button button-primary" type="submit">搜索图纸</button>
+                                <button class="button button-primary icon-action" type="submit" aria-label="搜索图纸" title="搜索图纸">
+                                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
+                                </button>
                             </form>
                         </div>
                     </section>
@@ -112,7 +114,9 @@
                                     <p class="upload-help">可一次选择多个文件。AI 助手区域也支持直接拖入 PDF/PNG 做分析。</p>
                                 </div>
                                 <div style="margin-top: 14px;">
-                                    <button id="upload-btn" class="button button-primary" type="submit">上传图纸</button>
+                                    <button id="upload-btn" class="button button-primary icon-action" type="submit" aria-label="上传图纸" title="上传图纸">
+                                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0-12 4 4m-4-4L8 7"/><path d="M5 13v6h14v-6"/></svg>
+                                    </button>
                                     <div id="upload-progress" class="upload-help" role="status" aria-live="polite"></div>
                                 </div>
                             </form>
@@ -147,7 +151,9 @@
                     <div class="chat-input">
                         <div class="chat-input-row">
                             <input class="field" type="text" id="chat-input" placeholder="输入你的问题，例如：这张图纸的关键技术要求是什么？">
-                            <button id="send-btn" class="button button-primary" type="button">发送问题</button>
+                            <button id="send-btn" class="button button-primary icon-action" type="button" aria-label="发送问题" title="发送问题">
+                                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 16-8-4 16-4.5-6.5L4 12Z"/><path d="m11.5 13.5 4-4"/></svg>
+                            </button>
                         </div>
                         <p class="chat-note">当已选择图纸时，问题会结合该图纸 OCR 和视觉分析结果回答。</p>
                     </div>
@@ -563,10 +569,6 @@
                 closeDrawingModalFunc();
                 chatInput.placeholder = '请输入你要基于该图纸审查或检索的问题';
                 chatInput.focus();
-                addMessage(
-                    `已载入图纸：${filename}\n请继续输入你的问题。我会严格基于你的问题、当前图纸内容和系统参考规则回答；如果依据不足，会明确说明不足。`,
-                    'bot'
-                );
             }
 
             function clearSelectedDrawing() {
