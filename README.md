@@ -279,6 +279,14 @@ MinerU2.5 论文还报告了其在多栏、表格、旧扫描件、页眉页脚�
 
 `start_server.bat` 会自动启动轻量调度器。调度器默认不加载 GPU 模型，用户选择模式或执行 OCR/问答时才加载目标模型；当前模型会保持驻留到下一次切换。
 
+## 平台与分支结构
+
+SolidCog 采用“跨平台核心 + 平台运行时”结构。图纸管理、上传、OCR 任务、进度查询、数据库和 Web 界面位于 `app/` 与 `templates/`，macOS/Apple Silicon 和 Windows/WSL 只负责模型进程、GPU 后端及启动脚本。详细约定见 [`docs/architecture.md`](docs/architecture.md)。
+
+- macOS：`./start_macos.command`
+- Windows/WSL：`start_server.bat`
+- 跨平台功能应通过 `feature/*` 分支合并到 `main`。平台专属改动使用短期的 `platform/macos-*` 或 `platform/windows-*` 分支，避免长期维护两套业务分支。
+
 ## 快速开始
 
 ```powershell
