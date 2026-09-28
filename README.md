@@ -302,7 +302,7 @@ cd C:\path\to\solidcog
 
 打开 <http://127.0.0.1:8000/home>，选择 OCR 后端并上传 PDF/PNG；查看或检索 OCR 后，再选择图纸向 MechVL 提问。尚未安装环境时从下一节开始。
 
-## 完整安装
+## Windows/WSL2 安装
 
 ### 运行要求
 
@@ -583,7 +583,7 @@ brew install python@3.12 llama.cpp
 ./platforms/macos/setup.sh
 
 # 配置 llama-server 路径
-cp .env.example .env
+[ -f .env ] || cp .env.example .env
 echo "LLAMA_SERVER_PATH=$(which llama-server)" >> .env
 ```
 
@@ -615,6 +615,10 @@ models/mineru/mineru-vision-f16.gguf
 models/mechvl/mechvl-model-q5.gguf
 models/mechvl/mechvl-vision-f16.gguf
 ```
+
+模型权重不包含在 Git 仓库中，首次运行本地推理前需自行准备上述 GGUF 文件。
+
+如果显示“调度器未连接”，请确认使用 `./start_macos.command` 启动，而不是单独运行 `uvicorn main:app`。启动脚本会检查 macOS 调度器健康状态，失败日志保存在 `~/Library/Logs/SolidCog/scheduler.log`。
 
 更多配置见 [`platforms/macos/README.md`](platforms/macos/README.md) 和 [`.env.example`](.env.example)。
 
