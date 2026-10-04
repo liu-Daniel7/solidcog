@@ -1,4 +1,4 @@
-#                                                               SolidCog
+# SolidCog
 
 > 面向机械工程图纸的本地智能解析、检索与审核工作台
 
@@ -8,14 +8,35 @@
 [![OCR](https://img.shields.io/badge/OCR-MinerU2.5--Pro%20%7C%20Qwen3--VL-0ea5e9)](#mineru-文档解析能力)
 [![Review](https://img.shields.io/badge/review-MechVL--4B--RL-111827)](#mechvl-机械图纸理解能力)
 
-[核心能力](#核心能力) · [技术创新](#技术创新) · [模型依据](#mineru-文档解析能力) · [性能实测](#性能与证据) · [系统架构](#系统架构) · [平台与安装](#平台与安装) · [快速开始](#快速开始) · [论文引用](#论文引用)
+[工作台预览](#工作台预览) · [核心能力](#核心能力) · [技术创新](#技术创新) · [模型依据](#mineru-文档解析能力) · [性能实测](#性能与证据) · [系统架构](#系统架构) · [平台与安装](#平台与安装) · [快速开始](#快速开始) · [论文引用](#论文引用)
 
 ---
 
 SolidCog 将通用文档解析模型 `MinerU2.5-Pro`、机械图纸多模态模型 `MechVL-4B-RL` 与可选的 `Qwen3-VL-Plus` 云端 OCR 组合为一套可在消费级显卡上运行的图纸工作流。系统支持图纸上传、结构化 OCR、全文检索、结果导出和交互式审图，并通过本地调度器保证两个 GPU 模型不会同时驻留显存。
 
+## 工作台预览
+
+![SolidCog 桌面图纸工作台](docs/images/workbench-desktop.png)
+
+上传、搜索与图纸库位于左侧，审图助手位于右侧。图纸可直接进入审阅，识别进度单独显示，刷新图纸库时保留当前对话。页面适配桌面、平板与手机，识别结果页沿用相同的排版与配色。
+
+- **图纸库**：批量选择或拖入文件，按文件名、材料和技术要求检索，查看或导出识别文字。
+- **图纸助手**：点击图纸行的“审图”，或在助手中选择图纸、拖入文件；结合图纸与 OCR 文字提问。
+- **处理设置**：选择 MinerU 本地识别或 Qwen 云端识别，查看本地模型状态并切换模式。
+
+<details>
+<summary>查看手机布局</summary>
+
+![SolidCog 手机图纸工作台](docs/images/workbench-mobile.png)
+
+</details>
+
+截图使用示例图纸。新版界面及交互改动见 [工作台改版 PR #19](https://github.com/liu-Daniel7/solidcog/pull/19)。
+
 ## 目录
 
+- [工作台预览](#工作台预览)
+- [支持文件格式](#支持文件格式)
 - [项目要解决的问题](#项目要解决的问题)
 - [核心工程贡献](#核心工程贡献)
 - [核心能力](#核心能力)
@@ -41,7 +62,7 @@ SolidCog 将通用文档解析模型 `MinerU2.5-Pro`、机械图纸多模态模�
 
 SolidCog 因此将任务拆分为三个层次：
 
-1. MinerU 或 Qwen3-VL 将 PDF/PNG 转换为可检索的结构化内容。
+1. MinerU 或 Qwen3-VL 将 PDF 或图片转换为可检索的结构化内容。
 2. SQLite 与本地文件系统管理图纸、OCR 结果和检索索引。
 3. MechVL 结合图像与 OCR 上下文执行机械图纸问答和辅助审核。
 
@@ -87,9 +108,9 @@ SolidCog 不只把图片交给 MechVL，而是组合图纸预览、标题栏、�
 
 ### 重构前后实测对比
 
-基线为模块化重构提交 `5cb4bc0` 的父版本，当前版本为本分支；测试使用同一台机器和同一 Python 环境。应用性能不包含 OCR 或 MechVL 推理。
+以下对比记录模块化重构时的实测结果：基线为提交 `5cb4bc0` 的父版本，“重构后”指当次重构版本；测试使用同一台机器和同一 Python 环境。应用性能不包含 OCR 或 MechVL 推理，测试数量也不代表后续版本的当前总数。
 
-| 指标 | 重构前 | 当前版本 | 结果 |
+| 指标 | 重构前 | 重构后（当时） | 结果 |
 | --- | ---: | ---: | --- |
 | 最大应用 Python 文件 | 2000 行 | 110 行 | 减少 **94.5%** |
 | 业务模块 | 2 个 | 23 个 | 职责拆分为配置、路由、服务、仓储与模型服务 |
@@ -117,7 +138,7 @@ SolidCog 不只把图片交给 MechVL，而是组合图纸预览、标题栏、�
 OCR 数据流保持一个稳定的输出契约：
 
 ```text
-PDF / PNG
+PDF / PNG / JPEG / TIFF / BMP / WebP
   +-- Qwen3-VL -> 分区 JSON ---------+
   +-- MinerU -> Markdown/content list +-> 统一 OCR 结构
                                            +-- SQLite 入库
@@ -149,7 +170,20 @@ PDF / PNG
 | 全文检索 | 文件名 + OCR 内容 | 按标题栏、技术要求、材料或任意识别文本查找图纸 |
 | 单卡模型切换 | 本地调度器 | MinerU 与 MechVL 分时驻留，显示阶段、已用时间和预计剩余时间 |
 
-支持批量上传 PDF、PNG 图纸，单文件最大 50 MB。OCR 后端按上传批次选择，聊天记录仅保留在当前浏览器标签页，并可手动清理。
+### 支持文件格式
+
+| 格式 | 扩展名 | 页面处理 |
+| --- | --- | --- |
+| PDF | `.pdf` | 支持多页，先渲染图纸页面再识别 |
+| PNG | `.png` | 支持透明背景，识别前合成白底 |
+| JPEG | `.jpg`、`.jpeg` | 支持照片与扫描件，读取 EXIF 方向 |
+| TIFF | `.tif`、`.tiff` | 支持单页与多页图像 |
+| BMP | `.bmp` | 解码后转换为 RGB 图像 |
+| WebP | `.webp` | 解码后转换为 RGB 图像 |
+
+单文件最大 **50 MB**，每批默认最多 **20 个文件**。多页文件按所选 OCR 后端的页面限制处理；Qwen 默认识别前 10 页，可通过 `QWEN_OCR_MAX_PAGES` 调整，超出限制会显示提示。DWG/DXF 需先导出为 PDF 或上述图片格式。
+
+OCR 后端按上传批次选择。图纸文件与识别结果保存在本机；选择 Qwen 时，图纸页面会发送至 DashScope。聊天记录仅保留在当前浏览器标签页，并可手动清理。
 
 ## 技术创新
 
@@ -300,12 +334,31 @@ SolidCog 采用“跨平台核心 + 平台运行时”结构：图纸管理、�
 
 ## 快速开始
 
+已完成安装时，按平台启动工作台。
+
+**Windows / WSL2**
+
 ```powershell
 cd C:\path\to\solidcog
 .\start_server.bat
 ```
 
-打开 <http://127.0.0.1:8000/home>，选择 OCR 后端并上传 PDF/PNG；查看或检索 OCR 后，再选择图纸向 MechVL 提问。尚未安装环境时从下一节开始。
+**macOS / Apple Silicon**
+
+```sh
+cd /path/to/solidcog
+./start_macos.command
+```
+
+打开 <http://127.0.0.1:8000/home>：
+
+1. 打开右上角“处理设置”，选择 MinerU 本地识别或 Qwen 云端识别。
+2. 在上传区域选择或拖入 PDF、PNG、JPEG、TIFF、BMP 或 WebP 文件。
+3. 点击“开始识别”，查看排队与处理进度；部分文件失败时，成功结果仍会归档，并显示失败原因。
+4. 在图纸库中检索文件，通过更多操作菜单查看识别结果或导出 OCR 文本。
+5. 点击图纸行的“审图”，或在助手中选择图纸，输入问题或使用提问建议。
+
+尚未安装环境时，请参阅 [Windows/WSL2 安装](#windowswsl2-安装) 或 [macOS / Apple Silicon 安装](#macos--apple-silicon-安装)。
 
 ## Windows/WSL2 安装
 
@@ -431,13 +484,13 @@ wsl.exe -d Ubuntu -- bash -lc "cd '$repoWsl/model_scheduler' && bash setup.sh"
 
 ### 日常启动
 
-安装只需执行一次。以后只运行 `start_server.bat`。模型转换器支持“空闲”“MinerU OCR”“MechVL 审核”；自动操作与手动点击使用同一套互斥调度逻辑。
+安装只需执行一次。Windows 日常运行 `start_server.bat`，macOS 日常运行 `./start_macos.command`。“处理设置”中的本地模型区提供“空闲”“文字识别”“图纸审核”三种模式；自动操作与手动点击使用同一套互斥调度逻辑。
 
 ## 本地模型调度器
 
 1. 浏览器通过 `/local-model/status` 读取调度器真实状态。
 2. 手动切换调用 `/local-model/switch/{mode}`；接口立即返回，页面继续轮询阶段与计时。
-3. MinerU 上传将 `ocr_backend=mineru` 传给 `/upload-drawing`，主服务把文件发送到调度器 `/mineru/parse`。
+3. 工作台上传将 `ocr_backend=mineru` 传给 `/upload-drawing-async`，并通过 `/upload-jobs/{job_id}` 查询任务进度；任务执行时，主服务把文件发送到调度器 `/mineru/parse`。
 4. 调度器停止 MechVL 进程组，等待端口关闭和显存释放，再启动 `mineru-api`。
 5. MinerU 返回 Markdown 和 content list；适配器映射为标题栏、技术要求、全文和布局，原始结果保存到 `mineru_results/`。
 6. MechVL 问答发送到调度器 `/mechvl/analyze`；调度器按相反顺序切换并代理原有请求。
@@ -465,6 +518,14 @@ curl.exe --noproxy "*" -X POST http://127.0.0.1:8090/switch/idle
 .\.venv\Scripts\python.exe -m unittest discover -s tests -v
 ```
 
+macOS 对应命令为：
+
+```sh
+.venv/bin/python -m unittest discover -s tests -v
+```
+
+工作台改版（[PR #19](https://github.com/liu-Daniel7/solidcog/pull/19)）已通过 **48 项 Python 回归测试**与 **7 组浏览器窗口配置**验证，覆盖窄屏与低高度布局、选图键盘焦点、聊天恢复、上传进度、部分失败、重试及中文文件名导出。浏览器验证使用隔离的示例图纸和模拟 OCR/问答响应，用于检查前端行为。
+
 ### 项目结构
 
 ```text
@@ -480,7 +541,7 @@ solidcog/
 ├─ mechvl_server/           # WSL2 本地模型服务
 ├─ model_scheduler/         # MinerU/MechVL 互斥调度服务
 ├─ templates/               # HTML/CSS/JavaScript 页面
-├─ tests/                   # 标准库 unittest 测试
+├─ tests/                   # unittest 与可选浏览器回归测试
 ├─ requirements.txt        # Windows 主服务依赖
 ├─ start_server.bat        # SolidCog 与调度器日常启动入口
 └─ start_scheduler_wsl.bat # 调度器前台诊断入口
@@ -493,7 +554,9 @@ solidcog/
 | `GET` | `/` | 主服务状态 |
 | `GET` | `/home` | 工作台 |
 | `GET` | `/search` | 文件名与 OCR 全文检索 |
-| `POST` | `/upload-drawing` | 上传并 OCR |
+| `POST` | `/upload-drawing` | 同步上传并 OCR |
+| `POST` | `/upload-drawing-async` | 批量上传并加入 OCR 队列 |
+| `GET` | `/upload-jobs/{job_id}` | 查询上传任务进度与结果 |
 | `GET` | `/drawings` | 图纸列表 |
 | `GET` | `/ocr/{id}` | OCR JSON |
 | `GET` | `/view-ocr/{id}` | OCR 页面 |
