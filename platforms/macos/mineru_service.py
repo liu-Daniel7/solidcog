@@ -3,15 +3,19 @@ from __future__ import annotations
 
 import io
 import os
+import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import pypdfium2 as pdfium
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from PIL import Image
+from PIL import Image, ImageSequence
 
 ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(ROOT))
+from app.services.drawing_ocr_images import iter_overlapping_tiles
+from app.services.images import rgb_page
 
 
 def _project_path(name: str, default: Path) -> Path:
@@ -59,11 +63,79 @@ def health():
 def _images(data: bytes, suffix: str) -> list[Image.Image]:
     if suffix.lower() == ".pdf":
         document = pdfium.PdfDocument(data)
-        scale = int(os.getenv("MINERU_PDF_DPI", "180")) / 72
-        return [page.render(scale=scale).to_pil().convert("RGB") for page in document]
-    image = Image.open(io.BytesIO(data))
-    image.load()
-    return [image.convert("RGB")]
+        scale = max(72, int(os.getenv("MINERU_PDF_DPI", "300"))) / 72
+        images = []
+        try:
+            for index in range(len(document)):
+                page = document[index]
+                try:
+                    bitmap = page.render(scale=scale)
+                    try:
+                        images.append(bitmap.to_pil().convert("RGB"))
+                    finally:
+                        bitmap.close()
+                finally:
+                    page.close()
+            return images
+        finally:
+            document.close()
+    with Image.open(io.BytesIO(data)) as image:
+        return [rgb_page(frame) for frame in ImageSequence.Iterator(image)]
+
+
+def _extract_drawing(image: Image.Image, page_index: int) -> tuple[list[dict], list[str]]:
+    """Keep global layout context while recovering small text inside drawing images."""
+    base = [dict(block) for block in client.two_step_extract(image)]
+    warnings = []
+    tile_size = max(512, int(os.getenv("MINERU_OCR_TILE_SIZE", "2200")))
+    blocks = list(base)
+    # Ordinary document layout often labels an entire view as an image and does
+    # not OCR its dimensions. Extract those regions explicitly as text.
+    for box, tile in iter_overlapping_tiles(image, tile_size=tile_size):
+        try:
+            local = [dict(block) for block in client.two_step_extract(tile)] if max(image.size) > tile_size else base
+            image_regions = [
+                {**block, "type": "text", "content": ""}
+                for block in local
+                if block.get("type") in {"image", "image_block"} and block.get("bbox")
+            ]
+            if image_regions and hasattr(client, "extract_with_layout"):
+                local = [block for block in local if block.get("type") not in {"image", "image_block"}]
+                local.extend(dict(block) for block in client.extract_with_layout(tile, image_regions))
+            for block in local:
+                bbox = block.get("bbox")
+                if not isinstance(bbox, (list, tuple)) or len(bbox) != 4:
+                    continue
+                x0, y0, x1, y1 = box
+                mapped = [(x0 + bbox[0] * (x1-x0))/image.width,
+                          (y0 + bbox[1] * (y1-y0))/image.height,
+                          (x0 + bbox[2] * (x1-x0))/image.width,
+                          (y0 + bbox[3] * (y1-y0))/image.height]
+                candidate = {**block, "bbox": mapped, "page_idx": page_index}
+                text = str(candidate.get("content") or candidate.get("text") or "").strip()
+                if not text or text.upper() in {"[NO TEXT]", "[NONE]", "[EMPTY]"}:
+                    continue
+                # Deduplicate only spatially matching text; the same dimension
+                # at a different location must survive.
+                if any(str(old.get("content") or old.get("text") or "").strip() == text
+                       and _overlaps(old.get("bbox"), mapped) for old in blocks):
+                    continue
+                blocks.append(candidate)
+        except Exception as exc:
+            warnings.append(f"第 {page_index + 1} 页区域 {box} 识别失败: {exc}")
+        finally:
+            tile.close()
+    for block in blocks:
+        block["page_idx"] = page_index
+    return blocks, warnings
+
+
+def _overlaps(first, second) -> bool:
+    if not isinstance(first, (list, tuple)) or len(first) != 4:
+        return False
+    intersection = max(0, min(first[2], second[2])-max(first[0], second[0])) * max(0, min(first[3], second[3])-max(first[1], second[1]))
+    smaller = min((first[2]-first[0])*(first[3]-first[1]), (second[2]-second[0])*(second[3]-second[1]))
+    return smaller > 0 and intersection / smaller >= 0.6
 
 
 def _block_markdown(block: dict[str, Any]) -> str:
@@ -106,9 +178,13 @@ async def file_parse(files: UploadFile = File(...)):
     data = await files.read()
     try:
         pages = _images(data, Path(files.filename or "image.png").suffix)
-        raw_pages, markdown_pages = [], []
-        for page in pages:
-            result = client.two_step_extract(page)
+        raw_pages, markdown_pages, warnings = [], [], []
+        for index, page in enumerate(pages):
+            try:
+                result, page_warnings = _extract_drawing(page, index)
+                warnings.extend(page_warnings)
+            finally:
+                page.close()
             raw_pages.append(result)
             markdown_pages.append(_to_markdown(result))
         markdown = "\n\n---\n\n".join(markdown_pages).strip()
@@ -116,7 +192,8 @@ async def file_parse(files: UploadFile = File(...)):
         return {
             "backend": "llama-cpp-engine",
             "model": "MinerU2.5-Pro-2605-1.2B",
-            "results": {name: {"md_content": markdown, "content_list": raw_pages}},
+            "results": {name: {"md_content": markdown, "content_list": raw_pages,
+                               "pages_processed": len(raw_pages), "page_errors": warnings}},
         }
     except Exception as exc:
         raise HTTPException(500, f"MinerU 解析失败: {exc}") from exc

@@ -2,7 +2,7 @@ from pathlib import Path
 
 from app import config
 from app.services import mineru
-from app.services.images import load_pages
+from app.services.images import load_pages, page_count
 from app.services.qwen import ocr_page
 
 
@@ -27,11 +27,17 @@ def run_ocr(file_path: str | Path, backend: str = "qwen") -> dict:
         images = load_pages(path, dpi=400, limit=config.QWEN_OCR_MAX_PAGES)
         pages = []
         errors = []
+        total_pages = page_count(path)
+        if total_pages > len(images):
+            errors.append(f"图纸共 {total_pages} 页，当前页数限制仅识别前 {len(images)} 页；请提高 QWEN_OCR_MAX_PAGES")
         for page_number, image in enumerate(images, 1):
             try:
                 pages.append(ocr_page(image, page_number))
+                errors.extend(f"第 {page_number} 页: {warning}" for warning in pages[-1].get("warnings", []))
             except Exception as exc:
                 errors.append(f"第 {page_number} 页: {exc}")
+            finally:
+                image.close()
         if not pages:
             return _error("Qwen3-VL OCR 全部页面识别失败: " + "; ".join(errors))
         return {
@@ -44,6 +50,7 @@ def run_ocr(file_path: str | Path, backend: str = "qwen") -> dict:
             "backend": "qwen_vl",
             "model": config.QWEN_VL_MODEL,
             "pages_processed": len(pages),
+            "pages_total": total_pages,
             "page_errors": errors,
         }
     except Exception as exc:

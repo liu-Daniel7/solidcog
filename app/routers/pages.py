@@ -37,9 +37,9 @@ def view_ocr(request: Request, drawing_id: int):
         raise HTTPException(404, "未找到图纸")
     return templates.TemplateResponse(request, "ocr_view.html", {
         "filename": str(drawing["filename"] or ""),
-        "title_text": str(drawing["title_text"] or "")[:200000],
-        "tech_text": str(drawing["tech_text"] or "")[:200000],
-        "all_text": str(drawing["all_text"] or "")[:200000],
+        "title_text": str(drawing["title_text"] or ""),
+        "tech_text": str(drawing["tech_text"] or ""),
+        "all_text": str(drawing["all_text"] or ""),
         "layout": str(drawing["layout"] or "unknown"),
     })
 

@@ -25,7 +25,7 @@
             <div class="topbar-actions" aria-label="系统状态">
                 <span class="status-pill"><span class="status-dot"></span>服务在线</span>
                 <span class="status-pill">OCR + AI 分析</span>
-                <span class="status-pill">PDF / PNG</span>
+                <span class="status-pill">PDF / 图片</span>
             </div>
         </header>
 
@@ -102,16 +102,16 @@
                         <div class="panel-header">
                             <div class="panel-title">
                                 <h2 id="upload-title">上传图纸</h2>
-                                <p>批量导入 PDF / PNG，自动识别并归档图纸内容。</p>
+                                <p>批量导入 PDF / 图片，自动识别并归档图纸内容。</p>
                             </div>
                         </div>
                         <div class="panel-body">
                             <form id="upload-form" action="/upload-drawing" method="post" enctype="multipart/form-data">
                                 <input id="upload-ocr-backend" type="hidden" name="ocr_backend" value="mineru">
                                 <div class="upload-zone">
-                                    <label for="files">选择 PDF 或 PNG 文件</label>
-                                    <input class="field" type="file" id="files" name="files" accept=".pdf,.png" multiple required>
-                                    <p class="upload-help">可一次选择多个文件。AI 助手区域也支持直接拖入 PDF/PNG 做分析。</p>
+                                    <label for="files">选择 PDF 或图片文件</label>
+                                    <input class="field" type="file" id="files" name="files" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" multiple required>
+                                    <p class="upload-help">可一次选择多个文件。AI 助手区域也支持直接拖入 PDF/图片 做分析。</p>
                                 </div>
                                 <div style="margin-top: 14px;">
                                     <button id="upload-btn" class="button button-primary icon-action" type="submit" aria-label="上传图纸" title="上传图纸">
@@ -142,7 +142,7 @@
                     <div id="chat-messages" class="chat-messages" aria-live="polite">
                         <div id="drop-zone" class="drop-zone">
                             <div>
-                                拖放 PDF/PNG 到这里作为问答上下文
+                                拖放 PDF/图片 到这里作为问答上下文
                                 <span>放入后请继续输入你要审图或检索的问题</span>
                             </div>
                         </div>
@@ -219,7 +219,7 @@
                 {% else %}
                     <div class="empty-state">
                         <strong>{% if keyword %}没有找到匹配图纸{% else %}还没有图纸数据{% endif %}</strong>
-                        <span>{% if keyword %}尝试更换关键词，或返回全部图纸。{% else %}从上方上传 PDF 或 PNG 后，这里会显示 OCR 和操作入口。{% endif %}</span>
+                        <span>{% if keyword %}尝试更换关键词，或返回全部图纸。{% else %}从上方上传 PDF 或图片后，这里会显示 OCR 和操作入口。{% endif %}</span>
                     </div>
                 {% endif %}
 
@@ -651,8 +651,8 @@
             function handleFileUpload(files) {
                 Array.from(files || []).forEach(function (file) {
                     const ext = file.name.split('.').pop().toLowerCase();
-                    if (ext !== 'pdf' && ext !== 'png') {
-                        addMessage(`不支持的文件类型：${ext}。请上传 PDF 或 PNG 文件。`, 'bot');
+                    if (!['pdf', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'bmp', 'webp'].includes(ext)) {
+                        addMessage(`不支持的文件类型：${ext}。请上传 PDF、PNG、JPEG、TIFF、BMP 或 WebP 文件。`, 'bot');
                         return;
                     }
 
