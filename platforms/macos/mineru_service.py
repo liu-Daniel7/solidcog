@@ -5,6 +5,7 @@ import io
 import os
 import sys
 from contextlib import asynccontextmanager
+from importlib.metadata import PackageNotFoundError, version
 from pathlib import Path
 from typing import Any
 
@@ -27,6 +28,16 @@ MODEL = _project_path("MINERU_MODEL_PATH", ROOT / "models/mineru/mineru-text-q8.
 MMPROJ = _project_path("MINERU_MMPROJ_PATH", ROOT / "models/mineru/mineru-vision-f16.gguf")
 engine = None
 client = None
+
+
+def _runtime_versions() -> dict[str, str]:
+    versions = {}
+    for name in ("mineru-vl-utils", "mineru-llama-cpp"):
+        try:
+            versions[name] = version(name)
+        except PackageNotFoundError:
+            versions[name] = "not_installed"
+    return versions
 
 
 def _load() -> None:
@@ -57,7 +68,8 @@ app = FastAPI(title="SolidCog MinerU for macOS", lifespan=lifespan)
 
 @app.get("/health")
 def health():
-    return {"status": "ready", "backend": "llama.cpp/Metal"}
+    return {"status": "ready", "backend": "llama.cpp/Metal",
+            "runtime_versions": _runtime_versions()}
 
 
 def _images(data: bytes, suffix: str) -> list[Image.Image]:
@@ -192,8 +204,10 @@ async def file_parse(files: UploadFile = File(...)):
         return {
             "backend": "llama-cpp-engine",
             "model": "MinerU2.5-Pro-2605-1.2B",
+            "runtime_versions": _runtime_versions(),
             "results": {name: {"md_content": markdown, "content_list": raw_pages,
-                               "pages_processed": len(raw_pages), "page_errors": warnings}},
+                               "pages_processed": len(raw_pages), "page_errors": warnings,
+                               "runtime_versions": _runtime_versions()}},
         }
     except Exception as exc:
         raise HTTPException(500, f"MinerU 解析失败: {exc}") from exc
