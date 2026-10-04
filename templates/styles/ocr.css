@@ -1,0 +1,224 @@
+.ocr-page {
+    padding-top: 40px;
+    padding-bottom: 48px;
+}
+
+.ocr-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(220px, 35%);
+    align-items: end;
+    gap: 32px;
+    margin-bottom: 30px;
+}
+
+.ocr-heading h1 {
+    font-size: 34px;
+    margin-top: 12px;
+}
+
+.ocr-heading p {
+    margin: 0;
+    color: var(--muted);
+    font-size: 13px;
+    max-width: 540px;
+}
+
+.ocr-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    border-left: 1px solid var(--line-strong);
+    padding-left: 24px;
+    min-width: 0;
+}
+
+.ocr-meta span {
+    display: block;
+    font-size: 10px;
+    color: var(--muted);
+}
+
+.ocr-meta strong {
+    display: block;
+    font-size: 12px;
+    font-weight: 550;
+    overflow-wrap: anywhere;
+}
+
+.ocr-layout {
+    display: grid;
+    grid-template-columns: 220px minmax(0, 1fr);
+    gap: 24px;
+    align-items: start;
+}
+
+.ocr-sidebar {
+    position: sticky;
+    top: 104px;
+    padding: 20px 14px;
+}
+
+.ocr-sidebar h2 {
+    margin: 0 10px 12px;
+    font-size: 14px;
+    font-weight: 550;
+}
+
+.ocr-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+}
+
+.ocr-nav a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    min-height: 42px;
+    padding: 10px;
+    border-radius: 7px;
+    font-size: 12px;
+}
+
+.ocr-nav a:hover, .ocr-nav a:focus-visible {
+    background: var(--primary-soft);
+}
+
+.ocr-nav span {
+    font-size: 9px;
+    color: var(--muted);
+}
+
+.ocr-section {
+    display: grid;
+    grid-template-columns: 175px minmax(0, 1fr);
+    gap: 24px;
+    padding: 28px;
+    border-bottom: 1px solid var(--line);
+    scroll-margin-top: 104px;
+}
+
+.ocr-section:last-child {
+    border-bottom: 0;
+}
+
+.ocr-section h2 {
+    margin: 7px 0 10px;
+    font-size: 20px;
+    font-weight: 550;
+}
+
+.ocr-section p {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.9;
+    color: var(--muted);
+}
+
+.ocr-section pre {
+    max-height: 600px;
+    margin: 0;
+    padding: 18px;
+    border: 1px solid var(--line);
+    border-radius: 9px;
+    background: #fafbf7;
+    font: 13px/1.9 "SFMono-Regular", Consolas, "PingFang SC", monospace;
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+    overflow-y: auto;
+    min-width: 0;
+}
+
+.ocr-empty {
+    display: grid;
+    place-items: center;
+    min-height: 120px;
+    padding: 18px;
+    border: 1px dashed var(--line-strong);
+    border-radius: 9px;
+    color: var(--muted);
+    font-size: 12px;
+    background: #fafbf7;
+}
+
+.ocr-disclaimer {
+    margin: 20px 0 0;
+    color: var(--muted);
+    font-size: 11px;
+    text-align: right;
+}
+
+@media (max-width: 960px) {
+    .ocr-layout {
+        grid-template-columns: 1fr;
+    }
+    .ocr-sidebar {
+        position: static;
+        padding: 14px;
+    }
+    .ocr-sidebar h2 {
+        display: none;
+    }
+    .ocr-nav {
+        flex-direction: row;
+        gap: 8px;
+    }
+    .ocr-nav a {
+        flex: 1;
+        justify-content: center;
+        gap: 12px;
+    }
+    .ocr-heading {
+        grid-template-columns: 1fr;
+        gap: 20px;
+    }
+    .ocr-meta {
+        border: 0;
+        padding: 0;
+    }
+}
+
+@media (max-width: 640px) {
+    .ocr-page {
+        padding-top: 28px;
+    }
+    .ocr-heading h1 {
+        font-size: 27px;
+    }
+    .ocr-heading p {
+        font-size: 12px;
+    }
+    .ocr-section {
+        grid-template-columns: 1fr;
+        padding: 20px 18px;
+        gap: 18px;
+    }
+    .ocr-section h2 {
+        font-size: 19px;
+    }
+    .ocr-section pre {
+        font-size: 12px;
+        padding: 14px;
+    }
+    .ocr-nav a {
+        gap: 5px;
+        padding: 7px 3px;
+        font-size: 11px;
+    }
+    .ocr-nav span {
+        font-size: 8px;
+    }
+    .ocr-sidebar {
+        padding: 9px;
+    }
+    .ocr-topbar .button {
+        padding: 8px 10px;
+        font-size: 11px;
+    }
+    .ocr-topbar {
+        gap: 12px;
+    }
+    .ocr-topbar .brand-title > span {
+        display: none;
+    }
+}

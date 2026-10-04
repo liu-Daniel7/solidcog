@@ -3,7 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>SolidCog 工程图纸智能工作台</title>
+    <meta name="theme-color" content="#f5f4ef">
+    <title>SolidCog · 工程图纸工作台</title>
     <style>
 {% include 'styles/workbench.css' %}
     </style>
@@ -13,240 +14,179 @@
 {% set keyword = search_keyword|default('', true) %}
 {% set current_sort = sort|default('desc', true) %}
 {% set current_page = page|default(1, true) %}
+{% macro icon(name) -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% if name == 'search' %}<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/>
+{% elif name == 'upload' %}<path d="M12 16V3m-4 4 4-4 4 4M4 15v5h16v-5"/>
+{% elif name == 'plus' %}<path d="M12 5v14M5 12h14"/>
+{% elif name == 'arrow' %}<path d="M5 12h14m-5-5 5 5-5 5"/>
+{% elif name == 'close' %}<path d="m6 6 12 12M6 18 18 6"/>
+{% elif name == 'trash' %}<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/>
+{% elif name == 'file' %}<path d="M13 3H5v18h14V9l-6-6Zm0 0v6h6M8 13h8M8 17h5"/>
+{% elif name == 'settings' %}<path d="M4 7h6m4 0h6M4 17h10m4 0h2"/><circle cx="12" cy="7" r="2"/><circle cx="16" cy="17" r="2"/>
+{% elif name == 'spark' %}<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/>
+{% elif name == 'library' %}<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+{% elif name == 'chevron' %}<path d="m8 10 4 4 4-4"/>
+{% endif %}</svg>
+{%- endmacro %}
+    <a class="skip-link" href="#workspace">跳转到工作台</a>
     <div class="app">
         <header class="topbar">
-            <div class="brand">
-                <div class="brand-mark" aria-hidden="true">SC</div>
-                <div class="brand-title">
-                    <strong>SolidCog</strong>
-                    <span>工程图纸智能工作台</span>
-                </div>
-            </div>
-            <div class="topbar-actions" aria-label="系统状态">
-                <span class="status-pill"><span class="status-dot"></span>服务在线</span>
-                <span class="status-pill">OCR + AI 分析</span>
-                <span class="status-pill">PDF / 图片</span>
+            <a class="brand" href="/home" aria-label="SolidCog 工作台首页">
+                <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="m16 3 11.3 6.5v13L16 29 4.7 22.5v-13L16 3Z" stroke="currentColor" stroke-width="1.8"/><path d="m4.7 9.5 11.3 7 11.3-7M16 16.5V29M16 3v13.5" stroke="currentColor" stroke-width="1.8"/><path d="m10.3 6.3 11.4 7v12.5" stroke="currentColor" stroke-width="1.3"/></svg></span>
+                <span class="brand-title">SolidCog<span>工程图纸智能工作台</span></span>
+            </a>
+            <nav class="main-nav" aria-label="主导航">
+                <a class="nav-link active" href="#library">{{ icon('library') }}图纸库</a>
+                <a class="nav-link" href="#assistant">{{ icon('spark') }}审图助手</a>
+            </nav>
+            <div class="topbar-actions">
+                <span class="connection-status"><span class="status-dot"></span>工作台在线</span>
+                <details class="settings" id="model-settings">
+                    <summary class="button button-secondary">{{ icon('settings') }}<span>处理设置</span>{{ icon('chevron') }}</summary>
+                    <section class="settings-card" aria-label="OCR 与本地模型控制">
+                        <div class="settings-heading"><strong>处理设置</strong><span>按任务选择识别方式</span></div>
+                        <div class="control-group">
+                            <span class="control-label">图纸文字识别</span>
+                            <div class="segmented" role="radiogroup" aria-label="上传 OCR 后端">
+                                <input type="radio" id="ocr-mineru" name="ocr-backend-control" value="mineru" checked>
+                                <label for="ocr-mineru">MinerU · 本地</label>
+                                <input type="radio" id="ocr-qwen" name="ocr-backend-control" value="qwen">
+                                <label for="ocr-qwen">Qwen · 云端</label>
+                            </div>
+                            <p id="backend-note" class="setting-note">图纸在本地识别，无需发送到云端。</p>
+                        </div>
+                        <div class="control-group">
+                            <span class="control-label">本地模型</span>
+                            <div class="segmented" aria-label="本地模型模式">
+                                <button class="mode-button" type="button" data-model-mode="idle" aria-pressed="true">空闲</button>
+                                <button class="mode-button" type="button" data-model-mode="mineru" aria-pressed="false">文字识别</button>
+                                <button class="mode-button" type="button" data-model-mode="mechvl" aria-pressed="false">图纸审核</button>
+                            </div>
+                        </div>
+                        <div id="model-state" class="model-state" data-tone="offline" aria-live="polite">
+                            <div class="model-state-main"><span class="status-dot"></span><span id="model-state-label">正在连接调度器</span></div>
+                            <div id="model-state-detail" class="model-state-detail"></div>
+                        </div>
+                    </section>
+                </details>
             </div>
         </header>
 
-        <main class="workspace">
+        <main class="workspace" id="workspace">
             <section class="overview" aria-labelledby="page-title">
-                <div>
-                    <h1 id="page-title">工作台</h1>
-                    <p>上传图纸、检索 OCR、查看结果和询问 AI 都在这里完成。</p>
+                <div class="overview-copy">
+                    <div class="eyebrow"><span class="eyebrow-line"></span>PRECISION, MADE CLEAR</div>
+                    <h1 id="page-title">读懂图纸，<span>看清每个细节。</span></h1>
+                    <p>从文字识别到工程问答，让复杂图纸成为清晰的设计依据。</p>
+                    <div class="workflow-caption"><span>01 上传</span><i></i><span>02 识别</span><i></i><span>03 审阅</span></div>
                 </div>
-                <div class="metric-strip" aria-label="当前工作台概览">
-                    <div class="metric">
-                        <b>{{ rows|length }}</b>
-                        <span>{% if keyword %}匹配图纸{% else %}当前图纸{% endif %}</span>
-                    </div>
-                    <div class="metric">
-                        <b>2</b>
-                        <span>AI 模型入口</span>
-                    </div>
-                    <div class="metric">
-                        <b>3</b>
-                        <span>OCR 结果分区</span>
-                    </div>
-                </div>
-            </section>
-
-            <section class="model-control" aria-label="OCR 与本地模型控制">
-                <div class="control-group">
-                    <span class="control-label">OCR 后端</span>
-                    <div class="segmented" role="radiogroup" aria-label="上传 OCR 后端">
-                        <input type="radio" id="ocr-mineru" name="ocr-backend-control" value="mineru" checked>
-                        <label for="ocr-mineru">MinerU 本地</label>
-                        <input type="radio" id="ocr-qwen" name="ocr-backend-control" value="qwen">
-                        <label for="ocr-qwen">Qwen3-VL 云端</label>
-                    </div>
-                </div>
-                <div class="control-group">
-                    <span class="control-label">本地模型</span>
-                    <div class="segmented" aria-label="本地 GPU 模式">
-                        <button class="mode-button" type="button" data-model-mode="idle" aria-pressed="true">空闲</button>
-                        <button class="mode-button" type="button" data-model-mode="mineru" aria-pressed="false">MinerU OCR</button>
-                        <button class="mode-button" type="button" data-model-mode="mechvl" aria-pressed="false">MechVL 审核</button>
-                    </div>
-                </div>
-                <div id="model-state" class="model-state" data-tone="offline" aria-live="polite">
-                    <div class="model-state-main"><span class="status-dot"></span><span id="model-state-label">正在连接调度器</span></div>
-                    <div id="model-state-detail" class="model-state-detail"></div>
-                </div>
+                <div class="drawing-motif" aria-hidden="true">{% include 'partials/drawing-motif.html' %}</div>
             </section>
 
             <section class="workbench" aria-label="图纸工作流">
                 <div class="stack">
-                    <section class="panel" aria-labelledby="search-title">
-                        <div class="panel-header">
-                            <div class="panel-title">
-                                <h2 id="search-title">搜索图纸</h2>
-                                <p>搜索文件名、标题栏、技术要求与 OCR 全文。</p>
+                    <section class="panel upload-panel" aria-labelledby="upload-title">
+                        <form id="upload-form" action="/upload-drawing" method="post" enctype="multipart/form-data">
+                            <input id="upload-ocr-backend" type="hidden" name="ocr_backend" value="mineru">
+                            <div class="upload-zone" id="upload-zone">
+                                <span class="upload-symbol">{{ icon('upload') }}</span>
+                                <div class="upload-copy">
+                                    <h2 id="upload-title">把图纸带进工作台</h2>
+                                    <p id="file-selection" aria-live="polite">拖入文件，或点击选择 · 支持批量上传</p>
+                                    <span class="upload-formats">PDF / PNG / JPG / TIFF / BMP / WebP · 每个文件 ≤ 50 MB</span>
+                                </div>
+                                <label class="button button-secondary file-picker" for="files">{{ icon('plus') }}选择文件</label>
+                                <input type="file" id="files" name="files" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" multiple required aria-label="选择要上传的图纸">
                             </div>
-                        </div>
-                        <div class="panel-body">
-                            <form class="form-row" action="/search" method="get">
-                                <input class="field" type="text" name="keyword" placeholder="搜索关键词" aria-label="搜索关键词" title="按文件名、标题栏、技术要求和 OCR 内容搜索" value="{{ keyword }}">
-                                <select class="field select" name="sort" aria-label="排序方式">
-                                    <option value="desc" {% if current_sort == 'desc' %}selected{% endif %}>时间最新</option>
-                                    <option value="asc" {% if current_sort == 'asc' %}selected{% endif %}>时间最早</option>
-                                </select>
-                                <button class="button button-primary icon-action" type="submit" aria-label="搜索图纸" title="搜索图纸">
-                                    <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="10.8" cy="10.8" r="6.8"/><path d="m16 16 5 5"/></svg>
-                                </button>
-                            </form>
-                        </div>
+                            <div class="upload-footer">
+                                <span class="backend-indicator"><span class="status-dot"></span><span id="backend-label">本地文字识别</span></span>
+                                <button id="upload-btn" class="button button-primary" type="submit" aria-label="上传图纸" disabled><span id="upload-button-label">开始识别</span>{{ icon('arrow') }}</button>
+                            </div>
+                            <div id="upload-progress" class="upload-progress" role="status" aria-live="polite" hidden></div>
+                        </form>
                     </section>
 
-                    <section class="panel" aria-labelledby="upload-title">
-                        <div class="panel-header">
-                            <div class="panel-title">
-                                <h2 id="upload-title">上传图纸</h2>
-                                <p>批量导入 PDF / 图片，自动识别并归档图纸内容。</p>
+                    <section class="panel data-panel" id="library" aria-labelledby="table-title">
+                        <div class="panel-header library-header">
+                            <div class="panel-title"><span class="section-index">01 / LIBRARY</span><h2 id="table-title">{% if keyword %}搜索结果{% else %}图纸库{% endif %}<span class="count-badge">{{ rows|length }}</span></h2></div>
+                            <div class="table-actions">
+                                {% if keyword %}<a class="text-link" href="/home">返回全部图纸 {{ icon('arrow') }}</a>
+                                {% elif rows %}<button class="button button-quiet delete-link" type="button" onclick="deleteAllDrawings()">{{ icon('trash') }}清空图纸库</button>{% endif %}
                             </div>
                         </div>
-                        <div class="panel-body">
-                            <form id="upload-form" action="/upload-drawing" method="post" enctype="multipart/form-data">
-                                <input id="upload-ocr-backend" type="hidden" name="ocr_backend" value="mineru">
-                                <div class="upload-zone">
-                                    <label for="files">选择 PDF 或图片文件</label>
-                                    <input class="field" type="file" id="files" name="files" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" multiple required>
-                                    <p class="upload-help">可一次选择多个文件。AI 助手区域也支持直接拖入 PDF/图片 做分析。</p>
-                                </div>
-                                <div style="margin-top: 14px;">
-                                    <button id="upload-btn" class="button button-primary icon-action" type="submit" aria-label="上传图纸" title="上传图纸">
-                                        <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12m0-12 4 4m-4-4L8 7"/><path d="M5 13v6h14v-6"/></svg>
-                                    </button>
-                                    <div id="upload-progress" class="upload-help" role="status" aria-live="polite"></div>
-                                </div>
-                            </form>
+                        <form class="form-row search-form" action="/search" method="get" role="search">
+                            <div class="search-field">{{ icon('search') }}<input class="field" type="search" name="keyword" placeholder="搜索文件名、材料或技术要求…" aria-label="搜索关键词" value="{{ keyword }}"></div>
+                            <select class="field select" name="sort" aria-label="排序方式"><option value="desc" {% if current_sort == 'desc' %}selected{% endif %}>最新上传</option><option value="asc" {% if current_sort == 'asc' %}selected{% endif %}>最早上传</option></select>
+                            <button class="button button-primary icon-action" type="submit" aria-label="搜索图纸" title="搜索图纸">{{ icon('arrow') }}</button>
+                        </form>
+                        {% if keyword %}<p class="results-note">“{{ keyword }}” · 本页 {{ rows|length }} 张图纸</p>{% endif %}
+                        {% if rows %}
+                        <div class="table-wrap">
+                            <table>
+                                <caption class="visually-hidden">图纸文件及识别结果</caption>
+                                <thead><tr><th scope="col">图纸名称</th><th scope="col">上传时间 / 大小</th><th scope="col">操作</th></tr></thead>
+                                <tbody>
+                                {% for d in rows %}
+                                    <tr>
+                                        <td><div class="file-cell"><span class="file-symbol">{{ icon('file') }}</span><div class="file-info"><a class="file-name" href="/uploads/{{ d[1]|urlencode }}" target="_blank" rel="noopener" draggable="true" data-id="{{ d[5] }}" data-filename="{{ d[1] }}" title="{{ d[1] }}">{{ d[1] }}</a><span class="file-meta">{{ d[2]|replace('.', '')|upper }}<span class="meta-divider">/</span>已识别</span></div></div></td>
+                                        <td class="file-details"><time>{{ d[4][:16] }}</time><span>{{ "%.2f"|format(d[3] / 1024 / 1024) }} MB</span></td>
+                                        <td><div class="action-group"><button class="text-link review-drawing" type="button" data-id="{{ d[5] }}" data-filename="{{ d[1] }}">审图 {{ icon('arrow') }}</button><details class="file-menu"><summary class="icon-button" aria-label="{{ d[1] }} 的更多操作">···</summary><div class="file-menu-items"><a href="/view-ocr/{{ d[5] }}">查看识别结果</a><a href="/export-ocr/{{ d[5] }}">导出 OCR 文本</a><a class="delete-link" href="/delete-drawing/{{ d[5] }}" onclick="return confirmDelete(event, this.href)">删除图纸</a></div></details></div></td>
+                                    </tr>
+                                {% endfor %}
+                                </tbody>
+                            </table>
                         </div>
+                        {% else %}
+                        <div class="empty-state">
+                            <div class="empty-illustration" aria-hidden="true">{{ icon('file') }}<span class="empty-cross cross-one">+</span><span class="empty-cross cross-two">+</span></div>
+                            <strong>{% if keyword %}还没找到这张图纸{% else %}你的下一份设计，从这里开始{% endif %}</strong>
+                            <p>{% if keyword %}试试图纸名称、材料或技术要求中的其他关键词。{% else %}上传第一张图纸，识别结果会自动归档在这里。{% endif %}</p>
+                            {% if keyword %}<a class="text-link" href="/home">查看全部图纸 {{ icon('arrow') }}</a>{% else %}<button class="text-link" id="empty-upload-btn" type="button">上传第一张图纸 {{ icon('arrow') }}</button>{% endif %}
+                        </div>
+                        {% endif %}
+                        {% if keyword %}
+                        <div class="pagination"><span>第 {{ current_page }} 页</span><div>{% if current_page|int > 1 %}<a class="button button-secondary" href="/search?keyword={{ keyword|urlencode }}&page={{ current_page|int - 1 }}&sort={{ current_sort }}">上一页</a>{% endif %}{% if rows|length == 10 %}<a class="button button-secondary" href="/search?keyword={{ keyword|urlencode }}&page={{ current_page|int + 1 }}&sort={{ current_sort }}">下一页</a>{% endif %}</div></div>
+                        {% endif %}
+                        <div class="library-footer"><span>识别文字可全文检索</span><span>文件保存在本机 {{ icon('file') }}</span></div>
                     </section>
                 </div>
 
-                <section class="panel chat-panel" aria-labelledby="assistant-title">
-                    <div class="panel-header">
-                        <div class="panel-title">
-                            <h2 id="assistant-title">图纸助手</h2>
-                            <p class="assistant-subtitle">选择图纸或拖入文件，开始审图与问答。</p>
-                        </div>
-                        <div class="chat-toolbar">
-                            <button id="select-drawing-btn" class="button button-secondary" type="button">选择图纸</button>
-                            <button id="clear-drawing-btn" class="button button-secondary icon-action" type="button" disabled aria-disabled="true" aria-label="取消选择" title="取消选择">
-                                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M6 6l12 12M18 6 6 18"/></svg>
-                            </button>
-                            <button id="clear-chat-btn" class="icon-button" type="button" aria-label="清理聊天记录" title="清理聊天记录"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/></svg></button>
-                            <span id="selected-drawing-name" class="selected-file" aria-live="polite"></span>
-                        </div>
+                <section class="panel chat-panel" id="assistant" aria-labelledby="assistant-title">
+                    <div class="panel-header assistant-header">
+                        <div class="panel-title"><span class="section-index">02 / ASSISTANT</span><h2 id="assistant-title">图纸助手<span class="ai-badge">AI</span></h2></div>
+                        <button id="clear-chat-btn" class="icon-button" type="button" aria-label="清理聊天记录" title="清理聊天记录">{{ icon('trash') }}</button>
                     </div>
-                    <div id="chat-messages" class="chat-messages" aria-live="polite">
-                        <div id="drop-zone" class="drop-zone">
-                            <div>
-                                拖放 PDF/图片 到这里作为问答上下文
-                                <span>放入后请继续输入你要审图或检索的问题</span>
-                            </div>
-                        </div>
-                        <div class="message bot-message">
-                            <div class="message-content">你好，我是 SolidCog 图纸助手。你可以先选择一张已上传图纸，再询问标题栏、技术要求、材料说明或审图要点。</div>
+                    <div class="chat-toolbar">
+                        <button id="select-drawing-btn" class="button button-secondary" type="button">{{ icon('plus') }}选择图纸</button>
+                        <span id="selected-drawing-name" class="selected-file" aria-live="polite"></span>
+                        <span class="context-placeholder" id="context-placeholder">为对话添加图纸</span>
+                        <button id="clear-drawing-btn" class="icon-button" type="button" disabled aria-disabled="true" aria-label="取消选择" title="取消选择">{{ icon('close') }}</button>
+                    </div>
+                    <div id="chat-messages" class="chat-messages" aria-live="polite" aria-label="审图对话">
+                        <div id="drop-zone" class="drop-zone"><div>{{ icon('upload') }}<strong>松开文件，开始审阅</strong><span>PDF 或图片将作为问答上下文</span></div></div>
+                        <div class="assistant-welcome" id="assistant-welcome">
+                            <div class="assistant-emblem" aria-hidden="true">{{ icon('spark') }}<span class="emblem-corner top-left"></span><span class="emblem-corner bottom-right"></span></div>
+                            <span class="eyebrow">A SECOND PAIR OF EYES</span>
+                            <h3>一起，看懂这张图。</h3>
+                            <p>选择图纸或直接拖入文件。<br>从材料、公差到技术要求，找到你关心的答案。</p>
+                            <div class="prompt-suggestions" aria-label="提问建议"><button type="button" data-prompt="这张图纸的关键技术要求是什么？">提取技术要求 {{ icon('arrow') }}</button><button type="button" data-prompt="图纸中有哪些尺寸与公差需要重点复核？">检查尺寸与公差 {{ icon('arrow') }}</button><button type="button" data-prompt="请总结这张图纸的材料和加工要求。">了解材料与工艺 {{ icon('arrow') }}</button></div>
                         </div>
                     </div>
                     <div class="chat-input">
-                        <div class="chat-input-row">
-                            <input class="field" type="text" id="chat-input" placeholder="输入你的问题，例如：这张图纸的关键技术要求是什么？">
-                            <button id="send-btn" class="button button-primary icon-action" type="button" aria-label="发送问题" title="发送问题">
-                                <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m4 12 16-8-4 16-4.5-6.5L4 12Z"/><path d="m11.5 13.5 4-4"/></svg>
-                            </button>
-                        </div>
-                        <p class="chat-note">当已选择图纸时，问题会结合该图纸 OCR 和视觉分析结果回答。</p>
+                        <label class="visually-hidden" for="chat-input">你的审图问题</label>
+                        <div class="chat-input-row"><input class="field" type="text" id="chat-input" placeholder="选择图纸，开始你的第一个问题…"><button id="send-btn" class="button button-primary icon-action" type="button" aria-label="发送问题" title="发送问题">{{ icon('arrow') }}</button></div>
+                        <p class="chat-note">{{ icon('spark') }}结合图纸与识别文字回答 · 关键结论请人工复核</p>
                     </div>
                 </section>
             </section>
-
-            <section class="panel data-panel" aria-labelledby="table-title">
-                <div class="panel-header">
-                    <div class="panel-title">
-                        <h2 id="table-title">{% if keyword %}搜索结果{% else %}图纸列表{% endif %}</h2>
-                        <p>{% if keyword %}当前关键词：{{ keyword }}{% else %}所有上传图纸按上传时间展示。{% endif %}</p>
-                    </div>
-                    <div class="table-actions">
-                        {% if keyword %}
-                            <span class="results-note">{{ rows|length }} 条结果</span>
-                            <a class="button button-secondary" href="/home">返回全部图纸</a>
-                        {% else %}
-                            <button class="button button-danger" type="button" onclick="deleteAllDrawings()">全部删除</button>
-                        {% endif %}
-                    </div>
-                </div>
-
-                {% if rows %}
-                    <div class="table-wrap">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>编号</th>
-                                    <th>文件</th>
-                                    <th>类型</th>
-                                    <th>大小</th>
-                                    <th>上传时间</th>
-                                    <th>操作</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for d in rows %}
-                                <tr>
-                                    <td>{{ d[0] }}</td>
-                                    <td>
-                                        <div class="file-cell">
-                                            <a class="file-name" href="/uploads/{{ d[1] }}" target="_blank" draggable="true" data-id="{{ d[5] }}" data-filename="{{ d[1] }}">{{ d[1] }}</a>
-                                            <span class="file-meta">可打开原文件或拖入 AI 助手</span>
-                                        </div>
-                                    </td>
-                                    <td>{{ d[2]|upper }}</td>
-                                    <td>{{ "%.2f"|format(d[3] / 1024 / 1024) }} MB</td>
-                                    <td>{{ d[4] }}</td>
-                                    <td>
-                                        <div class="action-group">
-                                            <a class="text-link" href="/view-ocr/{{ d[5] }}">查看 OCR</a>
-                                            <a class="text-link" href="/export-ocr/{{ d[5] }}">导出 OCR</a>
-                                            <a class="text-link delete-link" href="/delete-drawing/{{ d[5] }}" onclick="return confirmDelete(event, this.href)">删除</a>
-                                        </div>
-                                    </td>
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                {% else %}
-                    <div class="empty-state">
-                        <strong>{% if keyword %}没有找到匹配图纸{% else %}还没有图纸数据{% endif %}</strong>
-                        <span>{% if keyword %}尝试更换关键词，或返回全部图纸。{% else %}从上方上传 PDF 或图片后，这里会显示 OCR 和操作入口。{% endif %}</span>
-                    </div>
-                {% endif %}
-
-                {% if keyword %}
-                    <div class="pagination">
-                        {% if current_page|int > 1 %}
-                            <a class="button button-secondary" href="/search?keyword={{ keyword }}&page={{ current_page|int - 1 }}&sort={{ current_sort }}">上一页</a>
-                        {% endif %}
-                        <a class="button button-secondary" href="/search?keyword={{ keyword }}&page={{ current_page|int + 1 }}&sort={{ current_sort }}">下一页</a>
-                    </div>
-                {% endif %}
-            </section>
+            <footer class="workspace-footer"><span>SolidCog<span class="footer-divider">/</span>让工程知识，触手可及。</span><span>DESIGNED FOR THE DETAILS<span class="footer-plus">+</span></span></footer>
         </main>
     </div>
-
-    <div id="drawing-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="drawing-modal-title">
-        <div class="modal-card">
-            <div class="modal-header">
-                <h3 id="drawing-modal-title">选择图纸作为对话上下文</h3>
-                <button id="close-drawing-modal" class="icon-button" type="button" aria-label="关闭">×</button>
-            </div>
-            <div id="drawing-list" class="drawing-list">
-                <div class="empty-state">加载中...</div>
-            </div>
-        </div>
+    <div id="drawing-modal" class="modal" role="dialog" aria-modal="true" aria-labelledby="drawing-modal-title" tabindex="-1">
+        <div class="modal-card"><div class="modal-header"><div><span class="section-index">DRAWING CONTEXT</span><h3 id="drawing-modal-title">选择一张图纸</h3></div><button id="close-drawing-modal" class="icon-button" type="button" aria-label="关闭">{{ icon('close') }}</button></div><p class="modal-description">将图纸与识别文字添加到当前对话。</p><div id="drawing-list" class="drawing-list"><div class="empty-state">加载中…</div></div></div>
     </div>
-
+    <div id="notification" class="notification" role="alert" hidden></div>
     <script>
         const pageDrawingList = {{ rows | tojson | safe }};
         const chatStateKey = 'solidcog.chat-state.v1';
@@ -272,9 +212,16 @@
             const modelState = document.getElementById('model-state');
             const modelStateLabel = document.getElementById('model-state-label');
             const modelStateDetail = document.getElementById('model-state-detail');
-            const leftWorkbenchStack = document.querySelector('.workbench > .stack');
-            const chatPanel = document.querySelector('.chat-panel');
-            const desktopWorkbench = window.matchMedia('(min-width: 1101px)');
+            const assistantWelcome = document.getElementById('assistant-welcome');
+            const contextPlaceholder = document.getElementById('context-placeholder');
+            const fileInput = document.getElementById('files');
+            const uploadZone = document.getElementById('upload-zone');
+            const uploadButtonLabel = document.getElementById('upload-button-label');
+            const progress = document.getElementById('upload-progress');
+            const settings = document.getElementById('model-settings');
+            let modalReturnFocus = null;
+            let allDrawings = [...pageDrawingList];
+            let drawingListLoaded = false;
 
             let selectedDrawingId = null;
             let restoringChatState = false;
@@ -381,22 +328,6 @@
                 }
             }
 
-            function syncChatPanelHeight() {
-                if (!leftWorkbenchStack || !chatPanel) return;
-                if (!desktopWorkbench.matches) {
-                    chatPanel.style.height = '';
-                    return;
-                }
-                chatPanel.style.height = `${Math.round(leftWorkbenchStack.getBoundingClientRect().height)}px`;
-            }
-
-            if ('ResizeObserver' in window && leftWorkbenchStack) {
-                new ResizeObserver(syncChatPanelHeight).observe(leftWorkbenchStack);
-            } else {
-                window.addEventListener('resize', syncChatPanelHeight);
-            }
-            desktopWorkbench.addEventListener('change', syncChatPanelHeight);
-
             function formatClock(date) {
                 return new Intl.DateTimeFormat('zh-CN', {
                     hour: '2-digit',
@@ -422,17 +353,6 @@
                     parts.push(`思考 ${formatDuration(performance.now() - startedAt)}`);
                 }
                 return parts.join(' · ');
-            }
-
-            function initializeExistingMessages() {
-                chatMessages.querySelectorAll('.message').forEach(function (message) {
-                    if (!message.querySelector('.message-meta')) {
-                        const meta = document.createElement('div');
-                        meta.className = 'message-meta';
-                        meta.textContent = `显示 ${formatClock(new Date())}`;
-                        message.appendChild(meta);
-                    }
-                });
             }
 
             function saveChatState() {
@@ -461,23 +381,21 @@
                 try {
                     state = JSON.parse(sessionStorage.getItem(chatStateKey));
                 } catch (error) {
-                    sessionStorage.removeItem(chatStateKey);
+                    try { sessionStorage.removeItem(chatStateKey); } catch (_) { /* Storage can be unavailable. */ }
                     return false;
                 }
                 if (!state || state.version !== 1 || !Array.isArray(state.messages)) return false;
 
                 restoringChatState = true;
                 chatMessages.querySelectorAll('.message').forEach(function (message) { message.remove(); });
-                state.messages.forEach(function (message) {
+                state.messages.filter(function (message) { return message.text !== welcomeMessage; }).forEach(function (message) {
                     if ((message.sender === 'user' || message.sender === 'bot') && typeof message.text === 'string') {
                         addMessage(message.text, message.sender, false, typeof message.meta === 'string' ? message.meta : '');
                     }
                 });
-                if (!chatMessages.querySelector('.message')) {
-                    addMessage(welcomeMessage, 'bot', false, messageMeta('显示'));
-                }
+                updateWelcome();
 
-                const drawing = (pageDrawingList || []).find(function (item) {
+                const drawing = allDrawings.find(function (item) {
                     return Number(item[5]) === Number(state.selectedDrawingId);
                 });
                 if (drawing) {
@@ -486,25 +404,36 @@
                     chatInput.placeholder = '请输入你要基于该图纸审查或检索的问题';
                 }
                 restoringChatState = false;
-                updateDrawingSelectionState();
-                saveChatState();
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+                if (drawing || state.selectedDrawingId == null || drawingListLoaded) {
+                    updateDrawingSelectionState();
+                    saveChatState();
+                }
+                chatMessages.scrollTop = chatMessages.querySelector('.message') ? chatMessages.scrollHeight : 0;
                 return true;
             }
 
             function clearChatHistory() {
-                if (!confirm('确定要清理当前标签页的聊天记录吗？当前图纸选择会保留。')) return;
+                if (chatInFlight || !confirm('确定要清理当前标签页的聊天记录吗？当前图纸选择会保留。')) return;
                 chatMessages.querySelectorAll('.message').forEach(function (message) { message.remove(); });
-                addMessage(welcomeMessage, 'bot', false, messageMeta('显示'));
+                updateWelcome();
+                saveChatState();
             }
 
             function openDrawingModal() {
+                modalReturnFocus = document.activeElement;
                 drawingModal.style.display = 'flex';
+                document.querySelector('.app').inert = true;
+                document.body.style.overflow = 'hidden';
+                closeDrawingModal.focus();
                 loadDrawings();
             }
 
             function closeDrawingModalFunc() {
+                if (drawingModal.style.display !== 'flex') return;
                 drawingModal.style.display = 'none';
+                document.querySelector('.app').inert = false;
+                document.body.style.overflow = '';
+                modalReturnFocus?.focus();
             }
 
             function updateDrawingSelectionState() {
@@ -512,6 +441,8 @@
                 clearDrawingBtn.disabled = !hasSelection;
                 clearDrawingBtn.setAttribute('aria-disabled', hasSelection ? 'false' : 'true');
                 selectedDrawingName.textContent = hasSelection ? selectedDrawingName.textContent : '';
+                selectedDrawingName.title = selectedDrawingName.textContent;
+                contextPlaceholder.hidden = hasSelection;
                 if (!restoringChatState) saveChatState();
             }
 
@@ -520,10 +451,23 @@
                 return `${value.toFixed(2)} MB`;
             }
 
-            function loadDrawings() {
+            async function fetchDrawingList() {
+                const response = await fetch('/drawings', { headers: { 'Accept': 'application/json' } });
+                if (!response.ok) throw new Error('无法加载图纸库，请稍后重试。');
+                const data = await response.json();
+                drawingListLoaded = true;
+                allDrawings = (data['图纸信息'] || []).map(function (d) {
+                    return [d['编号'], d['文件名'], d['文件类型'], d['文件大小(字节)'], d['上传时间'], d.id];
+                }).reverse();
+            }
+
+            async function loadDrawings() {
+                drawingList.textContent = '正在加载图纸…';
+                try { await fetchDrawingList(); }
+                catch (error) { drawingList.textContent = error.message; return; }
                 drawingList.innerHTML = '';
 
-                if (!pageDrawingList || pageDrawingList.length === 0) {
+                if (allDrawings.length === 0) {
                     const empty = document.createElement('div');
                     empty.className = 'empty-state';
                     empty.textContent = '暂无图纸，请先上传图纸。';
@@ -531,7 +475,7 @@
                     return;
                 }
 
-                pageDrawingList.forEach(function (drawing) {
+                allDrawings.forEach(function (drawing) {
                     const drawingId = drawing[5];
                     const filename = drawing[1];
                     const fileSizeMB = formatSize(drawing[3]);
@@ -578,28 +522,21 @@
                 selectedDrawingId = null;
                 selectedDrawingName.textContent = '';
                 updateDrawingSelectionState();
-                chatInput.placeholder = '输入你的问题，例如：这张图纸的关键技术要求是什么？';
+                chatInput.placeholder = '选择图纸，开始你的第一个问题…';
                 chatInput.focus();
             }
 
             function findDrawingByFilename(filename) {
-                return (pageDrawingList || []).find(function (drawing) {
+                return allDrawings.find(function (drawing) {
                     return drawing[1] === filename;
                 });
             }
 
             function removeLoadingMessage() {
-                const loadingMessage = chatMessages.lastElementChild;
+                const loadingMessage = chatMessages.querySelector('.loading');
                 if (loadingMessage && loadingMessage.classList.contains('loading')) {
                     chatMessages.removeChild(loadingMessage);
                 }
-            }
-
-            function normalizeAnswer(data) {
-                if (typeof data === 'string') return data;
-                if (data && typeof data.answer === 'string') return data.answer;
-                if (data && typeof data.detail === 'string') return data.detail;
-                return JSON.stringify(data, null, 2);
             }
 
             function setupDropZone() {
@@ -622,6 +559,9 @@
                     dropZone.style.opacity = '0';
                     dropZone.style.pointerEvents = 'none';
 
+                    const contextId = event.dataTransfer.getData('application/x-solidcog-drawing');
+                    const context = allDrawings.find(d => String(d[5]) === contextId);
+                    if (context) { selectDrawing(context[5], context[1]); return; }
                     if (event.dataTransfer.types.includes('text/html')) {
                         const html = event.dataTransfer.getData('text/html');
                         const parser = new DOMParser();
@@ -648,52 +588,106 @@
                 });
             }
 
-            function handleFileUpload(files) {
-                Array.from(files || []).forEach(function (file) {
-                    const ext = file.name.split('.').pop().toLowerCase();
-                    if (!['pdf', 'png', 'jpg', 'jpeg', 'tif', 'tiff', 'bmp', 'webp'].includes(ext)) {
-                        addMessage(`不支持的文件类型：${ext}。请上传 PDF、PNG、JPEG、TIFF、BMP 或 WebP 文件。`, 'bot');
-                        return;
+            function updateWelcome() {
+                assistantWelcome.hidden = Boolean(chatMessages.querySelector('.message'));
+            }
+
+            function validateFiles(files) {
+                if (files.length > 20) throw new Error('每次最多上传 20 个文件，请分批选择。');
+                for (const file of files) {
+                    if (!/\.(pdf|png|jpe?g|tiff?|bmp|webp)$/i.test(file.name)) throw new Error(`不支持的文件：${file.name}`);
+                    if (file.size > 50 * 1024 * 1024) throw new Error(`“${file.name}”超过 50 MB，请选择较小文件。`);
+                    if (!file.size) throw new Error(`“${file.name}”是空文件，请重新选择。`);
+                }
+            }
+
+            function updateFileSelection() {
+                const files = Array.from(fileInput.files || []);
+                const selection = document.getElementById('file-selection');
+                selection.title = files.map(f => f.name).join('、');
+                selection.textContent = files.length ? `已选择 ${files.length} 个文件 · ${files.map(f => f.name).join('、')}` : '拖入文件，或点击选择 · 支持批量上传';
+                uploadBtn.disabled = uploadInFlight || !files.length;
+                uploadButtonLabel.textContent = '开始识别';
+                progress.hidden = true;
+                try { validateFiles(files); }
+                catch (error) {
+                    progress.hidden = false;
+                    progress.dataset.tone = 'error';
+                    progress.textContent = error.message;
+                    uploadBtn.disabled = true;
+                }
+            }
+
+            async function refreshLibrary() {
+                const response = await fetch(window.location.pathname + window.location.search);
+                if (!response.ok) throw new Error('图纸已保存，刷新页面即可查看图纸库。');
+                const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
+                const library = doc.getElementById('library');
+                if (!library) throw new Error('图纸已保存，刷新页面即可查看图纸库。');
+                document.getElementById('library').replaceWith(library);
+                await fetchDrawingList();
+            }
+
+            async function startUpload(files, useAsContext = false) {
+                if (uploadInFlight || !files.length) return;
+                try { validateFiles(files); }
+                catch (error) { notifyUser(error.message); return; }
+                const formData = new FormData();
+                Array.from(files).forEach(file => formData.append('files', file));
+                formData.append('ocr_backend', uploadOcrBackend.value);
+                uploadInFlight = true;
+                uploadBtn.disabled = true;
+                fileInput.disabled = true;
+                ocrBackendControls.forEach(control => { control.disabled = true; });
+                uploadButtonLabel.textContent = '识别中…';
+                progress.hidden = false;
+                progress.dataset.tone = 'loading';
+                progress.textContent = '正在上传文件并创建任务…';
+                try {
+                    const response = await fetch('/upload-drawing-async', {
+                        method: 'POST', headers: { 'Accept': 'application/json' }, body: formData
+                    });
+                    const data = await response.json().catch(function () { return {}; });
+                    if (!response.ok || !data.success) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+                    const result = await pollUploadJob(data.job.job_id, progress);
+                    uploadButtonLabel.textContent = result.status === 'partial' ? '部分完成' : '识别完成';
+                    progress.dataset.tone = result.status === 'partial' ? 'error' : 'ready';
+                    progress.textContent = result.status === 'partial'
+                        ? `已保存 ${result.results.length} 张图纸。${(result.errors || []).map(e => `${e.filename || '文件'}：${e.error}`).join('；')}`
+                        : `已完成 ${result.results.length} 张图纸的识别，结果已归档。`;
+                    fileInput.value = '';
+                    document.getElementById('file-selection').textContent = '拖入文件，或点击选择 · 支持批量上传';
+                    if (useAsContext && result.results?.[0]?.id) {
+                        selectDrawing(result.results[0].id, result.results[0].filename);
                     }
+                    await refreshLibrary();
+                    saveChatState();
+                } catch (error) {
+                    uploadButtonLabel.textContent = '重新识别';
+                    progress.dataset.tone = 'error';
+                    progress.textContent = `上传提示：${error.message}`;
+                } finally {
+                    uploadInFlight = false;
+                    fileInput.disabled = false;
+                    ocrBackendControls.forEach(control => { control.disabled = false; });
+                    uploadBtn.disabled = !fileInput.files.length;
+                }
+            }
 
-                    addMessage(`正在上传文件：${file.name}`, 'bot');
-
-                    const formData = new FormData();
-                    formData.append('files', file);
-                    formData.append('ocr_backend', uploadOcrBackend.value);
-
-                    fetch('/upload-drawing-async', {
-                        method: 'POST',
-                        headers: { 'Accept': 'application/json' },
-                        body: formData
-                    })
-                        .then(async function (response) {
-                            const data = await response.json().catch(function () { return {}; });
-                            if (!response.ok || !data.success) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
-                            const result = await pollUploadJob(data.job.job_id, { textContent: '' });
-                            if (result.results && result.results[0] && result.results[0].id) {
-                                addMessage(`文件处理完成：${file.name}`, 'bot');
-                                selectDrawing(result.results[0].id, result.results[0].filename || file.name);
-                            } else {
-                                addMessage(`文件处理失败：${result.errors?.[0]?.error || '未返回图纸 ID'}`, 'bot');
-                            }
-                        })
-                        .catch(function (error) {
-                            addMessage(`上传文件时出错：${error.message}`, 'bot');
-                            console.error('Upload error:', error);
-                        });
-                });
+            function handleFileUpload(files) {
+                startUpload(Array.from(files || []), true);
             }
 
             function sendMessage() {
                 const message = chatInput.value.trim();
                 if (!message || chatInFlight) return;
                 if (selectedDrawingId === null) {
-                    addMessage('请先选择一张图纸，再使用 MechVL 提问。', 'bot', false, messageMeta('需要图纸'));
+                    openDrawingModal();
                     return;
                 }
                 chatInFlight = true;
                 sendBtn.disabled = true;
+                clearChatBtn.disabled = true;
                 chatInput.disabled = true;
                 const requestStartedAt = performance.now();
                 addMessage(message, 'user', false, messageMeta('发送'));
@@ -728,6 +722,7 @@
                         .finally(function () {
                             chatInFlight = false;
                             sendBtn.disabled = false;
+                            clearChatBtn.disabled = false;
                             chatInput.disabled = false;
                             chatInput.focus();
                             syncModelStatus();
@@ -773,6 +768,7 @@
                     messageDiv.appendChild(meta);
                 }
                 chatMessages.appendChild(messageDiv);
+                updateWelcome();
                 chatMessages.scrollTop = chatMessages.scrollHeight;
                 if (!isLoading && !restoringChatState) saveChatState();
                 return messageDiv;
@@ -784,39 +780,65 @@
             });
             ocrBackendControls.forEach(function (control) {
                 control.addEventListener('change', function () {
-                    if (control.checked) uploadOcrBackend.value = control.value;
+                    if (control.checked) syncBackend(control.value);
                 });
             });
-            uploadForm.addEventListener('submit', async function (event) {
+            uploadForm.addEventListener('submit', function (event) {
                 event.preventDefault();
-                if (uploadInFlight) return;
-                const fileInput = document.getElementById('files');
-                const progress = document.getElementById('upload-progress');
-                if (!fileInput.files.length) return;
-                uploadInFlight = true;
-                uploadBtn.disabled = true;
-                uploadBtn.textContent = '已加入 OCR 队列';
-                progress.textContent = '正在上传文件并创建任务…';
-                try {
-                    const response = await fetch('/upload-drawing-async', {
-                        method: 'POST', headers: { 'Accept': 'application/json' },
-                        body: new FormData(uploadForm)
-                    });
-                    const data = await response.json().catch(function () { return {}; });
-                    if (!response.ok || !data.success) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
-                    const jobId = data.job.job_id;
-                    await pollUploadJob(jobId, progress);
-                    uploadBtn.textContent = '处理完成';
-                    progress.textContent = '图纸已处理完成，正在刷新列表…';
-                    window.location.reload();
-                } catch (error) {
-                    uploadBtn.disabled = false;
-                    uploadBtn.textContent = '重新上传';
-                    progress.textContent = `上传任务失败：${error.message}`;
-                } finally {
-                    uploadInFlight = false;
-                }
+                startUpload(Array.from(fileInput.files || []));
             });
+            fileInput.addEventListener('change', updateFileSelection);
+            ['dragenter', 'dragover'].forEach(function (name) {
+                uploadZone.addEventListener(name, function (event) {
+                    event.preventDefault();
+                    if (!uploadInFlight) uploadZone.classList.add('dragging');
+                });
+            });
+            uploadZone.addEventListener('dragleave', function (event) {
+                if (!uploadZone.contains(event.relatedTarget)) uploadZone.classList.remove('dragging');
+            });
+            uploadZone.addEventListener('drop', function (event) {
+                event.preventDefault();
+                uploadZone.classList.remove('dragging');
+                if (uploadInFlight) return;
+                fileInput.files = event.dataTransfer.files;
+                updateFileSelection();
+            });
+            document.addEventListener('dragstart', function (event) {
+                const link = event.target.closest('a[data-filename]');
+                if (link) event.dataTransfer.setData('application/x-solidcog-drawing', link.dataset.id);
+            });
+            document.addEventListener('click', function (event) {
+                const review = event.target.closest('.review-drawing');
+                if (review) {
+                    selectDrawing(review.dataset.id, review.dataset.filename);
+                    document.getElementById('assistant').scrollIntoView({ block: 'nearest' });
+                }
+                if (event.target.closest('#empty-upload-btn')) fileInput.click();
+                if (!settings.contains(event.target)) settings.open = false;
+                document.querySelectorAll('.file-menu[open]').forEach(function (menu) {
+                    if (!menu.contains(event.target)) menu.open = false;
+                });
+            });
+            document.querySelectorAll('[data-prompt]').forEach(function (button) {
+                button.addEventListener('click', function () {
+                    chatInput.value = button.dataset.prompt;
+                    if (selectedDrawingId === null) openDrawingModal();
+                    else chatInput.focus();
+                });
+            });
+            function syncBackend(value) {
+                uploadOcrBackend.value = value;
+                document.getElementById('backend-label').textContent = value === 'qwen' ? '云端文字识别' : '本地文字识别';
+                document.getElementById('backend-note').textContent = value === 'qwen' ? '图纸页面将发送至 Qwen 云端进行文字识别。' : '图纸在本地识别，无需发送到云端。';
+                try { sessionStorage.setItem('solidcog.ocr-backend', value); } catch (_) { /* Storage can be unavailable. */ }
+            }
+            let storedBackend;
+            try { storedBackend = sessionStorage.getItem('solidcog.ocr-backend'); } catch (_) { /* Keep the default. */ }
+            if (['mineru', 'qwen'].includes(storedBackend)) {
+                document.getElementById(`ocr-${storedBackend}`).checked = true;
+                syncBackend(storedBackend);
+            }
 
             async function pollUploadJob(jobId, progress) {
                 while (true) {
@@ -838,25 +860,42 @@
                 if (event.target === drawingModal) closeDrawingModalFunc();
             });
             document.addEventListener('keydown', function (event) {
-                if (event.key === 'Escape') closeDrawingModalFunc();
+                if (event.key === 'Escape') { closeDrawingModalFunc(); settings.open = false; }
+                if (event.key === 'Tab' && drawingModal.style.display === 'flex') {
+                    const items = Array.from(drawingModal.querySelectorAll('button:not(:disabled), a[href]'));
+                    const first = items[0], last = items[items.length - 1];
+                    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+                    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+                }
             });
             sendBtn.addEventListener('click', sendMessage);
             chatInput.addEventListener('keydown', function (event) {
-                if (event.key === 'Enter') sendMessage();
+                if (event.key === 'Enter' && !event.isComposing) sendMessage();
             });
-            initializeExistingMessages();
             if (!restoreChatState()) {
                 updateDrawingSelectionState();
                 saveChatState();
             }
             setupDropZone();
-            syncChatPanelHeight();
+            // A search page may not contain the drawing selected in a previous view.
+            fetchDrawingList().then(function () {
+                if (selectedDrawingId === null) restoreChatState();
+            }).catch(function () { /* Page data remains available. */ });
             syncModelStatus();
             window.setInterval(renderModelStatus, 1000);
             window.setInterval(function () {
                 if (!document.hidden) syncModelStatus();
             }, 3000);
         });
+
+        let notificationTimer;
+        function notifyUser(message) {
+            const notification = document.getElementById('notification');
+            notification.textContent = message;
+            notification.hidden = false;
+            clearTimeout(notificationTimer);
+            notificationTimer = setTimeout(function () { notification.hidden = true; }, 6000);
+        }
 
         async function postAndReload(url) {
             try {
@@ -865,9 +904,9 @@
                     window.location.href = '/home';
                     return;
                 }
-                alert('操作失败（HTTP ' + response.status + '），请重试');
+                notifyUser('操作失败（HTTP ' + response.status + '），请重试');
             } catch (error) {
-                alert('操作失败：网络错误，请重试');
+                notifyUser('操作失败：网络错误，请重试');
             }
         }
 

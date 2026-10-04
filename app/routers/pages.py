@@ -1,4 +1,5 @@
 from datetime import datetime
+from urllib.parse import quote
 
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import HTMLResponse, PlainTextResponse
@@ -50,4 +51,7 @@ def export_ocr(drawing_id: int):
     if not drawing:
         raise HTTPException(404, "未找到图纸")
     text = f"标题栏:\n{drawing['title_text'] or ''}\n\n技术要求:\n{drawing['tech_text'] or ''}\n\n全局OCR:\n{drawing['all_text'] or ''}"
-    return PlainTextResponse(text, headers={"Content-Disposition": f"attachment; filename={drawing['filename']}.txt"})
+    filename = quote(f"{drawing['filename']}.txt", safe="")
+    return PlainTextResponse(text, headers={
+        "Content-Disposition": f"attachment; filename=\"drawing-{drawing_id}.txt\"; filename*=UTF-8''{filename}",
+    })

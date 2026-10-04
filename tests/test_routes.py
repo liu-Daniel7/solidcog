@@ -71,6 +71,13 @@ class RouteTests(unittest.TestCase):
         self.assertTrue(drawings.delete(record_id))
         self.assertIsNone(drawings.get(record_id))
 
+    def test_export_preserves_chinese_filename(self):
+        record_id = self.create_record("轴承座 图纸.pdf")
+        response = self.client.get(f"/export-ocr/{record_id}")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("filename*=UTF-8''%E8%BD%B4%E6%89%BF%E5%BA%A7%20%E5%9B%BE%E7%BA%B8.pdf.txt", response.headers["content-disposition"])
+        self.assertIn("技术要求", response.text)
+
     def test_cross_origin_write_rejected(self):
         self.create_record("a.pdf")
         response = self.client.post(
