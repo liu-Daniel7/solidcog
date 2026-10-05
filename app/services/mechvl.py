@@ -45,3 +45,12 @@ def analyze(path: Path, question: str, ocr_context: str) -> str:
     }
     response = model_scheduler.analyze_with_mechvl(payload)
     return str(response.get("answer", "")).strip()
+
+
+def analyze_stream(path: Path, question: str, ocr_context: str):
+    payload = {
+        "question": question,
+        "ocr_context": ocr_context,
+        "image_base64": _encoded_preview(path),
+    }
+    yield from model_scheduler.stream_analyze_with_mechvl(payload)

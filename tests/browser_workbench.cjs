@@ -64,9 +64,13 @@ const { chromium } = require('playwright');
         assert.equal(await page.locator('.drawing-item').count(), 4, 'Picker must show the whole library on search pages');
         await page.keyboard.press('Escape');
         await page.goto(`${url}/home`);
-        await page.route('**/chat-with-drawing', async route => {
+        await page.route('**/chat-with-drawing/stream', async route => {
             assert.equal(route.request().postDataJSON().drawing_id, 1);
-            await route.fulfill({ json: { success: true, answer: '材料为45钢，关键尺寸请对照原图复核。' } });
+            await route.fulfill({
+                status: 200,
+                contentType: 'text/event-stream',
+                body: 'event: token\ndata: {"text":"材料为45钢，"}\n\nevent: token\ndata: {"text":"关键尺寸请对照原图复核。"}\n\nevent: done\ndata: {}\n\n'
+            });
         });
         await page.locator('[data-prompt]').last().click();
         await page.locator('#send-btn').click();

@@ -1,6 +1,7 @@
 """SolidCog macOS model scheduler. Windows/WSL implementation stays isolated."""
 from __future__ import annotations
 
+import json
 import os
 import shutil
 import sys
@@ -9,7 +10,7 @@ from pathlib import Path
 
 import requests
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -134,3 +135,67 @@ def mechvl_analyze(request: AnalyzeRequest):
     except (RuntimeError, requests.RequestException, ValueError, KeyError, IndexError) as exc: raise HTTPException(503, str(exc)) from exc
     finally:
         if scheduler.busy_operation == "MechVL 审核": scheduler.end_operation()
+
+
+@app.post("/mechvl/analyze/stream")
+def mechvl_analyze_stream(request: AnalyzeRequest):
+    operation_started = False
+    try:
+        scheduler.ensure_mode("mechvl", timeout=240)
+        scheduler.begin_operation("MechVL 审核")
+        operation_started = True
+        context = f"\n\nOCR/图纸文字参考：\n{request.ocr_context}" if request.ocr_context else ""
+        payload = {
+            "model": "mechvl", "temperature": 0.1, "max_tokens": 2048, "stream": True,
+            "messages": [{"role": "user", "content": [
+                {"type": "text", "text": request.question + context},
+                {"type": "image_url", "image_url": {"url": "data:image/jpeg;base64," + request.image_base64}},
+            ]}],
+        }
+        response = session.post(
+            "http://127.0.0.1:8100/v1/chat/completions",
+            json=payload,
+            stream=True,
+            timeout=(10, 600),
+        )
+        response.raise_for_status()
+    except TimeoutError as exc:
+        if operation_started: scheduler.end_operation()
+        raise HTTPException(504, str(exc)) from exc
+    except (RuntimeError, requests.RequestException) as exc:
+        if operation_started: scheduler.end_operation()
+        raise HTTPException(503, str(exc)) from exc
+
+    def events():
+        try:
+            for line in response.iter_lines(chunk_size=1, decode_unicode=True):
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8", errors="replace")
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    event = json.loads(data)
+                    if event.get("error"):
+                        yield f"data: {json.dumps({'error': event['error']}, ensure_ascii=False)}\n\n"
+                        break
+                    token = event["choices"][0].get("delta", {}).get("content")
+                except (KeyError, IndexError, TypeError, ValueError):
+                    continue
+                if token:
+                    yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+            yield "data: [DONE]\n\n"
+        except requests.RequestException as exc:
+            message = str(exc)
+            yield f"data: {json.dumps({'error': message}, ensure_ascii=False)}\n\n"
+        finally:
+            response.close()
+            scheduler.end_operation()
+
+    return StreamingResponse(
+        events(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )

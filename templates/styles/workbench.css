@@ -1063,16 +1063,6 @@ tbody tr:hover {
     padding-bottom: 20px;
 }
 
-.ai-badge {
-    display: inline-block;
-    padding: 3px 6px;
-    border: 1px solid #d7e4bf;
-    border-radius: 4px;
-    color: #677b48;
-    font: 9px/1.1 "SFMono-Regular", Consolas, monospace;
-    letter-spacing: .5px;
-}
-
 .chat-toolbar {
     display: flex;
     align-items: center;
@@ -1247,6 +1237,21 @@ tbody tr:hover {
     line-height: 1.8;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+}
+
+.message-content.is-streaming::after {
+    content: '';
+    display: inline-block;
+    width: 1px;
+    height: 1em;
+    margin-left: 2px;
+    vertical-align: -2px;
+    background: currentColor;
+    animation: stream-caret 0.9s steps(2, start) infinite;
+}
+
+@keyframes stream-caret {
+    to { visibility: hidden; }
 }
 
 .user-message {

@@ -38,7 +38,7 @@
             </a>
             <nav class="main-nav" aria-label="主导航">
                 <a class="nav-link active" href="#library">{{ icon('library') }}图纸库</a>
-                <a class="nav-link" href="#assistant">{{ icon('spark') }}审图助手</a>
+                <a class="nav-link" href="#assistant">{{ icon('spark') }}图纸问答</a>
             </nav>
             <div class="topbar-actions">
                 <span class="connection-status"><span class="status-dot"></span>工作台在线</span>
@@ -154,7 +154,7 @@
 
                 <section class="panel chat-panel" id="assistant" aria-labelledby="assistant-title">
                     <div class="panel-header assistant-header">
-                        <div class="panel-title"><span class="section-index">02 / ASSISTANT</span><h2 id="assistant-title">图纸助手<span class="ai-badge">AI</span></h2></div>
+                        <div class="panel-title"><span class="section-index">02 / DRAWING Q&amp;A</span><h2 id="assistant-title">图纸问答</h2></div>
                         <button id="clear-chat-btn" class="icon-button" type="button" aria-label="清理聊天记录" title="清理聊天记录">{{ icon('trash') }}</button>
                     </div>
                     <div class="chat-toolbar">
@@ -163,7 +163,7 @@
                         <span class="context-placeholder" id="context-placeholder">为对话添加图纸</span>
                         <button id="clear-drawing-btn" class="icon-button" type="button" disabled aria-disabled="true" aria-label="取消选择" title="取消选择">{{ icon('close') }}</button>
                     </div>
-                    <div id="chat-messages" class="chat-messages" aria-live="polite" aria-label="审图对话">
+                    <div id="chat-messages" class="chat-messages" aria-live="polite" aria-label="图纸问答对话">
                         <div id="drop-zone" class="drop-zone"><div>{{ icon('upload') }}<strong>松开文件，开始审阅</strong><span>PDF 或图片将作为问答上下文</span></div></div>
                         <div class="assistant-welcome" id="assistant-welcome">
                             <div class="assistant-emblem" aria-hidden="true">{{ icon('spark') }}<span class="emblem-corner top-left"></span><span class="emblem-corner bottom-right"></span></div>
@@ -190,7 +190,7 @@
     <script>
         const pageDrawingList = {{ rows | tojson | safe }};
         const chatStateKey = 'solidcog.chat-state.v1';
-        const welcomeMessage = '你好，我是 SolidCog 图纸助手。你可以先选择一张已上传图纸，再询问标题栏、技术要求、材料说明或审图要点。';
+        const welcomeMessage = '你好，我是 SolidCog 图纸问答。你可以先选择一张已上传图纸，再询问标题栏、技术要求、材料说明或审图要点。';
 
         document.addEventListener('DOMContentLoaded', function () {
             const chatInput = document.getElementById('chat-input');
@@ -532,10 +532,32 @@
                 });
             }
 
-            function removeLoadingMessage() {
-                const loadingMessage = chatMessages.querySelector('.loading');
-                if (loadingMessage && loadingMessage.classList.contains('loading')) {
-                    chatMessages.removeChild(loadingMessage);
+            async function readEventStream(response, onEvent) {
+                if (!response.body) throw new Error('浏览器不支持读取流式响应');
+                const reader = response.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+
+                function dispatch(block) {
+                    let eventName = 'message';
+                    const data = [];
+                    block.split(/\r?\n/).forEach(function (line) {
+                        if (line.startsWith('event:')) eventName = line.slice(6).trim();
+                        else if (line.startsWith('data:')) data.push(line.slice(5).trimStart());
+                    });
+                    if (data.length) onEvent(eventName, JSON.parse(data.join('\n')));
+                }
+
+                while (true) {
+                    const { value, done } = await reader.read();
+                    buffer += decoder.decode(value || new Uint8Array(), { stream: !done });
+                    const blocks = buffer.split(/\r?\n\r?\n/);
+                    buffer = blocks.pop() || '';
+                    blocks.forEach(dispatch);
+                    if (done) {
+                        if (buffer.trim()) dispatch(buffer);
+                        return;
+                    }
                 }
             }
 
@@ -692,30 +714,59 @@
                 const requestStartedAt = performance.now();
                 addMessage(message, 'user', false, messageMeta('发送'));
                 chatInput.value = '';
-                addMessage('正在思考...', 'bot', true, messageMeta('请求'));
+                const loadingMessage = addMessage('正在分析图纸…', 'bot', true, messageMeta('请求'));
+                let streamedMessage = null;
+                let streamedText = '';
+                let streamError = '';
 
                 {
                     setTimeout(syncModelStatus, 500);
-                    fetch('/chat-with-drawing', {
+                    fetch('/chat-with-drawing/stream', {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
                         body: JSON.stringify({
                             prompt: message,
                             drawing_id: selectedDrawingId
                         })
                     })
                         .then(async function (response) {
-                            const data = await response.json().catch(function () { return {}; });
-                            if (!response.ok) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
-                            removeLoadingMessage();
-                            if (data.success) {
-                                addMessage(data.answer, 'bot', false, messageMeta('回复', requestStartedAt));
-                            } else {
-                                addMessage(`分析失败：${data.detail || '未知错误'}`, 'bot', false, messageMeta('失败', requestStartedAt));
+                            if (!response.ok) {
+                                const data = await response.json().catch(function () { return {}; });
+                                throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+                            }
+                            await readEventStream(response, function (eventName, data) {
+                                if (eventName === 'token' && typeof data.text === 'string') {
+                                    if (!streamedMessage) {
+                                        loadingMessage.remove();
+                                        streamedMessage = addMessage('', 'bot', false, messageMeta('正在生成', requestStartedAt));
+                                        streamedMessage.querySelector('.message-content').classList.add('is-streaming');
+                                    }
+                                    streamedText += data.text;
+                                    streamedMessage.querySelector('.message-content').textContent = streamedText;
+                                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                                } else if (eventName === 'error') {
+                                    streamError = data.message || '生成中断';
+                                }
+                            });
+                            if (!streamedMessage) loadingMessage.remove();
+                            if (streamedMessage) {
+                                streamedMessage.querySelector('.message-content').classList.remove('is-streaming');
+                                streamedMessage.querySelector('.message-meta').textContent = messageMeta(streamError ? '部分回复' : '回复', requestStartedAt);
+                                saveChatState();
+                            }
+                            if (streamError) {
+                                addMessage(`回答中断：${streamError}`, 'bot', false, messageMeta('失败', requestStartedAt));
+                            } else if (!streamedText) {
+                                addMessage('模型没有返回文字，请重试。', 'bot', false, messageMeta('提示', requestStartedAt));
                             }
                         })
                         .catch(function (error) {
-                            removeLoadingMessage();
+                            loadingMessage.remove();
+                            if (streamedMessage) {
+                                streamedMessage.querySelector('.message-content').classList.remove('is-streaming');
+                                streamedMessage.querySelector('.message-meta').textContent = messageMeta('部分回复', requestStartedAt);
+                                saveChatState();
+                            }
                             addMessage(`分析失败：${error.message || '请稍后再试'}`, 'bot', false, messageMeta('失败', requestStartedAt));
                             console.error('Chat with drawing error:', error);
                         })
