@@ -38,6 +38,21 @@ def chat_with_drawing(prompt: str, drawing_id: int) -> dict:
     }
 
 
+def chat_with_drawing_stream(prompt: str, drawing_id: int):
+    drawing = drawing_repository.get(drawing_id)
+    if not drawing:
+        raise HTTPException(404, "未找到该图纸")
+    path = config.UPLOAD_DIR / drawing["filename"]
+    if not path.exists():
+        raise HTTPException(404, "图纸文件不存在")
+    ocr_context = (
+        f"标题栏：\n{drawing['title_text'] or ''}\n\n"
+        f"技术要求：\n{drawing['tech_text'] or ''}\n\n"
+        f"全局 OCR：\n{drawing['all_text'] or ''}"
+    )
+    return mechvl.analyze_stream(path, prompt, ocr_context)
+
+
 def run_tool(tool_call: str, parameters: dict) -> dict:
     if tool_call == "query_database":
         query_type = parameters.get("query_type", "list")

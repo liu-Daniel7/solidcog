@@ -1,3 +1,4 @@
+import json
 from pathlib import Path
 
 import requests
@@ -79,4 +80,32 @@ def analyze_with_mechvl(payload: dict) -> dict:
     except requests.Timeout as exc:
         raise HTTPException(504, "MechVL 切换或分析超时") from exc
     except (requests.RequestException, ValueError) as exc:
+        raise _error(exc) from exc
+
+
+def stream_analyze_with_mechvl(payload: dict):
+    try:
+        with _session.post(
+            f"{config.MODEL_SCHEDULER_BASE_URL}/mechvl/analyze/stream",
+            json=payload,
+            stream=True,
+            timeout=(10, config.MECHVL_TIMEOUT_SECONDS + config.MODEL_SWITCH_TIMEOUT_SECONDS),
+        ) as response:
+            response.raise_for_status()
+            for line in response.iter_lines(chunk_size=1):
+                line = line.decode("utf-8")
+                if not line or not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    return
+                try:
+                    event = json.loads(data)
+                except ValueError as exc:
+                    raise RuntimeError("本地模型返回了无法解析的流式数据") from exc
+                if event.get("error"):
+                    raise RuntimeError(event["error"])
+                if event.get("token"):
+                    yield str(event["token"])
+    except requests.RequestException as exc:
         raise _error(exc) from exc
