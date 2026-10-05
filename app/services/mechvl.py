@@ -49,8 +49,9 @@ def analyze(path: Path, question: str, ocr_context: str) -> str:
 
 def analyze_stream(path: Path, question: str, ocr_context: str):
     payload = {
-        "question": question,
+        "question": f"{question}\n\n格式要求：标题和小标题使用纯文本，不要使用 Markdown 粗体标记或星号。",
         "ocr_context": ocr_context,
         "image_base64": _encoded_preview(path),
     }
-    yield from model_scheduler.stream_analyze_with_mechvl(payload)
+    for token in model_scheduler.stream_analyze_with_mechvl(payload):
+        yield token.replace("*", "")
