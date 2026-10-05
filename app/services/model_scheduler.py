@@ -92,9 +92,8 @@ def stream_analyze_with_mechvl(payload: dict):
             timeout=(10, config.MECHVL_TIMEOUT_SECONDS + config.MODEL_SWITCH_TIMEOUT_SECONDS),
         ) as response:
             response.raise_for_status()
-            for line in response.iter_lines(chunk_size=1, decode_unicode=True):
-                if isinstance(line, bytes):
-                    line = line.decode("utf-8", errors="replace")
+            for line in response.iter_lines(chunk_size=1):
+                line = line.decode("utf-8")
                 if not line or not line.startswith("data:"):
                     continue
                 data = line[5:].strip()

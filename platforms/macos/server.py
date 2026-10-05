@@ -168,9 +168,8 @@ def mechvl_analyze_stream(request: AnalyzeRequest):
 
     def events():
         try:
-            for line in response.iter_lines(chunk_size=1, decode_unicode=True):
-                if isinstance(line, bytes):
-                    line = line.decode("utf-8", errors="replace")
+            for line in response.iter_lines(chunk_size=1):
+                line = line.decode("utf-8")
                 if not line or not line.startswith("data:"):
                     continue
                 data = line[5:].strip()
