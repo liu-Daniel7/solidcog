@@ -51,6 +51,16 @@ class RouteTests(unittest.TestCase):
         for control in ("upload-form", "select-drawing-btn", "clear-drawing-btn", "send-btn"):
             self.assertIn(f'id="{control}"', html)
 
+    def test_mineru_attribution_and_about_page(self):
+        for path in ("/home", "/search?keyword=技术", "/about"):
+            response = self.client.get(path)
+            self.assertEqual(response.status_code, 200)
+            self.assertIn("Powered by MinerU", response.text)
+            self.assertIn('href="https://github.com/opendatalab/MinerU"', response.text)
+            self.assertNotIn("{% include", response.text)
+        self.assertIn('href="/about"', self.client.get("/home").text)
+        self.assertIn('href="/home"', self.client.get("/about").text)
+
     def test_core_routes(self):
         record_id = self.create_record()
         self.assertEqual(self.client.get("/").status_code, 200)
