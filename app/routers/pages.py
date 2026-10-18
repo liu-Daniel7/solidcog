@@ -24,6 +24,11 @@ def home(request: Request):
     return templates.TemplateResponse(request, "index.html", {"图纸列表": rows, "drawings": rows})
 
 
+@router.get("/about", response_class=HTMLResponse)
+def about(request: Request):
+    return templates.TemplateResponse(request, "about.html", {})
+
+
 @router.get("/search", response_class=HTMLResponse)
 def search(request: Request, keyword: str = "", page: int = 1, sort: str = "desc"):
     page = max(page, 1)

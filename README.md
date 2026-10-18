@@ -2,6 +2,8 @@
 
 > 面向机械工程图纸的本地智能解析、检索与审核工作台
 
+**[Powered by MinerU](https://github.com/opendatalab/MinerU)** · 本地文档解析由 MinerU 提供支持。分发或向客户及其他第三方提供服务时，请保留文档与界面中的标识，详见[第三方组件与标识](docs/attribution.md)。
+
 [![License](https://img.shields.io/badge/license-Apache--2.0-2ea44f)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%2B%20WSL2%20%7C%20macOS%20%2B%20Metal-0078d4)](#平台与安装)
 [![GPU](https://img.shields.io/badge/GPU-RTX%204060%208GB%20verified-76b900)](#性能与证据)
