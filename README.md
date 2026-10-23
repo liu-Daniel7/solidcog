@@ -723,6 +723,13 @@ models/mechvl/mechvl-vision-f16.gguf
 SolidCog 自有代码采用 [Apache License 2.0](LICENSE) 发布，版权归
 `liu-Daniel7` 所有。第三方组件的归属信息见 [NOTICE](NOTICE)。
 
+SolidCog 使用 [MinerU2.5-Pro](https://huggingface.co/opendatalab/MinerU2.5-Pro-2605-1.2B)
+进行图纸解析（模型权重 Apache-2.0）。MinerU 项目采用 MinerU Open Source
+License（Apache-2.0 附加署名条款），本项目按要求标明 **Powered by MinerU**。
+推理引擎 [mineru-llama-cpp](https://github.com/opendatalab/mineru-llama-cpp)
+采用 MIT 许可；macOS 依赖锁定为包含其许可证文件的 `0.1.5`，
+底层 [llama.cpp](https://github.com/ggml-org/llama.cpp) 同样为 MIT。
+
 SolidCog 使用 [MechVL-4B-RL](https://huggingface.co/XiaofengAlg/MechVL-4B-RL)
 提供机械图纸问答能力。该模型由其原作者发布，并采用 Apache-2.0；本仓库不包含、
 不拥有且不重新授权其模型权重，安装脚本仅从原始 Hugging Face 仓库下载模型。

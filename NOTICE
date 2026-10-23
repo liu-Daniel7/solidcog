@@ -1,12 +1,47 @@
 SolidCog
 Copyright 2026 liu-Daniel7
 
-SolidCog uses MechVL-4B-RL for local mechanical drawing question answering.
-MechVL-4B-RL is developed by its original authors and is distributed under
-the Apache License 2.0. SolidCog does not include or relicense its model
-weights. The installation script downloads them from the original repository:
+SolidCog uses third-party software and models that remain subject to their
+respective licenses and service terms. SolidCog does not relicense third-party
+code or model weights.
 
+MinerU and MinerU2.5-Pro
+-----------------------
+SolidCog uses MinerU2.5-Pro model weights for local document parsing. The model
+weights are distributed under Apache License 2.0 by OpenDataLab. SolidCog does
+not include or relicense these weights; setup downloads them from the original
+repository.
+
+The MinerU project is licensed under the MinerU Open Source License, which
+includes additional attribution terms. SolidCog displays "Powered by MinerU" in
+the README and application interface.
+https://github.com/opendatalab/MinerU/blob/master/LICENSE.md
+
+mineru-llama-cpp
+-----------------
+SolidCog uses mineru-llama-cpp as the local inference engine for MinerU models.
+Version 0.1.5 is distributed under the MIT License; its license text is included
+in the package.
+https://github.com/opendatalab/mineru-llama-cpp/blob/v0.1.5/LICENSE
+
+llama.cpp
+---------
+llama.cpp is distributed under the MIT License.
+https://github.com/ggml-org/llama.cpp/blob/master/LICENSE
+
+MechVL-4B-RL
+------------
+SolidCog uses MechVL-4B-RL for local mechanical drawing question answering.
+The model is distributed by its original authors under Apache License 2.0.
+SolidCog does not include or relicense its weights; setup downloads them from
+the original repository. MechVL-4B-RL is based on Qwen3-VL-4B-Instruct.
 https://huggingface.co/XiaofengAlg/MechVL-4B-RL
 
-MechVL-4B-RL is based on Qwen3-VL-4B-Instruct. Third-party models, APIs, and
-dependencies remain subject to their respective licenses and service terms.
+Qwen VL / DashScope
+-------------------
+SolidCog offers an optional cloud OCR path using Qwen VL through Alibaba Cloud
+DashScope. When this path is selected, document page images are sent to the
+service. The applicable Alibaba Cloud service terms govern its use.
+
+Python dependencies and other third-party components remain subject to their
+respective licenses and service terms.

@@ -43,3 +43,15 @@ build/
 # Local AI models and macOS runtime artifacts (too large for regular Git)
 models/
 tmp/
+
+# Local-only materials: internal research, compliance correspondence, drafts,
+# business planning, and copyright application documents.
+.qoder/
+.playwright-cli/
+/briefs/
+/research/
+/软件著作权申请资料/
+/本地项目梳理-2026-10-23.md
+docs/business/
+docs/compliance/
+docs/third-party-licenses.md

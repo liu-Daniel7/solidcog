@@ -21,7 +21,7 @@
 
 macOS 服务直接调用 `mineru-vl-utils[llama-cpp]`，而非完整 `mineru`
 主程序。当前验证版本为 `mineru-vl-utils==2.0.5` 和
-`mineru-llama-cpp==0.1.2`。更新现有环境时，先停止启动器，再运行
+`mineru-llama-cpp==0.1.5`。更新现有环境时，先停止启动器，再运行
 `./platforms/macos/setup.sh`，随后重新启动应用。
 
 MinerU 服务的 `GET http://127.0.0.1:8200/health` 会返回
