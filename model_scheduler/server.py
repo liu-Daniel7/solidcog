@@ -91,9 +91,11 @@ def switch(target: str):
 
 @app.post("/mineru/parse")
 def mineru_parse(file: UploadFile = File(...)):
+    operation_started = False
     try:
         scheduler.ensure_mode("mineru", timeout=240)
         scheduler.begin_operation("MinerU OCR")
+        operation_started = True
         response = session.post(
             "http://127.0.0.1:8200/file_parse",
             files={"files": (file.filename or "drawing", file.file, file.content_type)},
@@ -120,15 +122,17 @@ def mineru_parse(file: UploadFile = File(...)):
     except requests.RequestException as exc:
         raise HTTPException(503, f"MinerU 服务请求失败: {exc}") from exc
     finally:
-        if scheduler.busy_operation == "MinerU OCR":
+        if operation_started:
             scheduler.end_operation()
 
 
 @app.post("/mechvl/analyze")
 def mechvl_analyze(request: AnalyzeRequest):
+    operation_started = False
     try:
         scheduler.ensure_mode("mechvl", timeout=360)
         scheduler.begin_operation("MechVL 审核")
+        operation_started = True
         response = session.post(
             "http://127.0.0.1:8100/analyze",
             json=request.model_dump(),
@@ -146,5 +150,5 @@ def mechvl_analyze(request: AnalyzeRequest):
     except requests.RequestException as exc:
         raise HTTPException(503, f"MechVL 服务请求失败: {exc}") from exc
     finally:
-        if scheduler.busy_operation == "MechVL 审核":
+        if operation_started:
             scheduler.end_operation()

@@ -101,23 +101,27 @@ def switch(target: str):
 
 @app.post("/mineru/parse")
 def mineru_parse(file: UploadFile = File(...)):
+    operation_started = False
     try:
         scheduler.ensure_mode("mineru", timeout=240)
         scheduler.begin_operation("MinerU OCR")
+        operation_started = True
         response = session.post("http://127.0.0.1:8200/file_parse", files={"files": (file.filename or "drawing", file.file, file.content_type)}, timeout=600)
         payload = response.json()
         return JSONResponse(status_code=response.status_code, content=payload)
     except TimeoutError as exc: raise HTTPException(504, str(exc)) from exc
     except (RuntimeError, requests.RequestException, ValueError) as exc: raise HTTPException(503, str(exc)) from exc
     finally:
-        if scheduler.busy_operation == "MinerU OCR": scheduler.end_operation()
+        if operation_started: scheduler.end_operation()
 
 
 @app.post("/mechvl/analyze")
 def mechvl_analyze(request: AnalyzeRequest):
+    operation_started = False
     try:
         scheduler.ensure_mode("mechvl", timeout=240)
         scheduler.begin_operation("MechVL 审核")
+        operation_started = True
         context = f"\n\nOCR/图纸文字参考：\n{request.ocr_context}" if request.ocr_context else ""
         payload = {
             "model": "mechvl", "temperature": 0.1, "max_tokens": 2048,
@@ -134,7 +138,7 @@ def mechvl_analyze(request: AnalyzeRequest):
     except TimeoutError as exc: raise HTTPException(504, str(exc)) from exc
     except (RuntimeError, requests.RequestException, ValueError, KeyError, IndexError) as exc: raise HTTPException(503, str(exc)) from exc
     finally:
-        if scheduler.busy_operation == "MechVL 审核": scheduler.end_operation()
+        if operation_started: scheduler.end_operation()
 
 
 @app.post("/mechvl/analyze/stream")
