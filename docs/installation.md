@@ -1,0 +1,186 @@
+# 安装与排障
+
+[返回 README](../README.md)
+
+选择一种运行方式：Apple Silicon 本地模型、Windows / WSL2 本地模型，或仅使用云端 OCR。Qwen API Key 只在云端 OCR 中需要。
+
+## macOS / Apple Silicon
+
+### 1. 安装依赖
+
+需要 Apple Silicon、Python 3.12 和支持多模态模型的 `llama-server`。历史验证机器为 M2 / 24 GB 统一内存；这不是所有图纸和量化配置的最低内存保证。
+
+```sh
+brew install python@3.12 llama.cpp
+git clone https://github.com/liu-Daniel7/solidcog.git
+cd solidcog
+./platforms/macos/setup.sh
+```
+
+安装脚本复用已有 `.venv`，安装主应用及 macOS 运行库，不下载模型。更新现有环境前先停止启动器，再执行同一安装命令。
+
+### 2. 准备模型
+
+本地推理需要两组 GGUF 模型及匹配的视觉投影文件：
+
+| 配置项 | 默认路径 |
+| --- | --- |
+| `MINERU_MODEL_PATH` | `models/mineru/mineru-text-q8.gguf` |
+| `MINERU_MMPROJ_PATH` | `models/mineru/mineru-vision-f16.gguf` |
+| `MECHVL_MODEL_PATH` | `models/mechvl/mechvl-model-q5.gguf` |
+| `MECHVL_MMPROJ_PATH` | `models/mechvl/mechvl-vision-f16.gguf` |
+
+原始权重来源：[MinerU2.5-Pro](https://huggingface.co/opendatalab/MinerU2.5-Pro-2605-1.2B)、[MechVL-4B-RL](https://huggingface.co/XiaofengAlg/MechVL-4B-RL)。原始权重不能直接改名为 GGUF 使用；需准备兼容的转换产物与视觉投影文件。本仓库没有一键下载或转换流程。
+
+文件名可以不同，在 `.env` 中修改相应路径即可；相对路径按仓库根目录解析。
+
+### 3. 配置并启动
+
+```sh
+# 保留已有配置；首次使用时才复制
+[ -f .env ] || cp .env.example .env
+command -v llama-server
+```
+
+若启动器不能自动找到 llama-server，在 `.env` 写入实际路径，例如：
+
+```dotenv
+LLAMA_SERVER_PATH=/opt/homebrew/bin/llama-server
+```
+
+只有使用 Qwen 时才填写 `QWEN_API_KEY`。随后运行：
+
+```sh
+./start_macos.command
+```
+
+打开 [工作台](http://127.0.0.1:8000/home)。启动器先检查调度器，再启动或复用网页服务；默认不加载大模型，选择本地 OCR 或问答后才按需加载。
+
+## Windows / WSL2
+
+### 当前兼容性限制
+
+这条路径保留了既有 CUDA 实现，但目前有两个需要明确的限制：
+
+1. 调度器调用 MinerU 旧 `/file_parse` API，安装未锁定版本的 `mineru[all]` 可能得到不兼容的完整 4.x 服务。仓库尚未提供锁定并重新验证的 WSL MinerU 安装组合。
+2. 工作台调用 `/chat-with-drawing/stream`，主应用再调用调度器 `/mechvl/analyze/stream`；Windows 调度器当前只有非流式 `/mechvl/analyze`。因此非流式服务可单独调用，但不能把网页问答视为已就绪。
+
+全新部署需要先解决上述接口兼容性。只需要上传、识别和检索时，可以先使用[云端 OCR](#仅使用云端-ocr)。
+
+### 基础环境
+
+- Windows 10 22H2 / Windows 11，x64，Python 3.12、Git。
+- 本地 CUDA 需要 WSL2 Ubuntu 与支持 WSL2 CUDA 的 NVIDIA Windows 驱动。
+- 历史验证设备为 RTX 4060 Laptop / 8 GB；建议至少 16 GB 系统内存、40 GB 可用磁盘，预留更多空间供权重与缓存使用。
+- 需要访问 PyPI、PyTorch 和 Hugging Face 下载依赖与模型。
+
+管理员 PowerShell：
+
+```powershell
+wsl --install -d Ubuntu
+```
+
+按提示重启并完成 Ubuntu 用户创建，检查 `wsl --list --verbose` 显示 WSL2。在 Ubuntu 中运行 `nvidia-smi` 确认 GPU 可见；WSL 内无需另装 Linux NVIDIA 驱动。
+
+### 主应用安装
+
+普通 PowerShell：
+
+```powershell
+git clone https://github.com/liu-Daniel7/solidcog.git
+cd solidcog
+py -3.12 -m venv .venv
+.\.venv\Scripts\python.exe -m pip install --upgrade pip
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+
+# 首次使用时复制；保留已有 .env
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+notepad .env
+```
+
+### 本地 MechVL 与调度器
+
+在 WSL Ubuntu 中进入仓库目录，例如 `/mnt/c/path/to/solidcog`，执行：
+
+```sh
+sudo apt-get update
+sudo apt-get install -y python3-venv
+bash mechvl_server/setup_wsl.sh
+bash mechvl_server/download_model.sh
+bash model_scheduler/setup.sh
+```
+
+MechVL 安装脚本安装 CUDA PyTorch，并尝试安装 FlashAttention；不可用时回退到 SDPA。权重通过 Hugging Face 下载。
+
+**MinerU 需单独配置。** 调度器预期可执行文件位于 `~/.local/share/solidcog/mineru/.venv/bin/mineru-api`，并要求支持 `--enable-vlm-preload` 参数、`/file_parse` 及旧返回结构。请使用经过核对的兼容环境；不能仅安装最新版来满足该契约。
+
+兼容环境准备完成后，在 Windows 仓库根目录运行：
+
+```powershell
+.\start_server.bat
+```
+
+启动器会尝试在 WSL 后台启动调度器。需要前台诊断时使用 `start_scheduler_wsl.bat`。Windows 网页流式问答限制仍见本节开头。
+
+## 仅使用云端 OCR
+
+不需要本地 GPU、GGUF、WSL 或模型调度器；不提供 MechVL 本地问答。
+
+安装 Python 3.12 后克隆仓库，在根目录创建虚拟环境：
+
+```sh
+# macOS / Linux
+python3.12 -m venv .venv
+.venv/bin/python -m pip install -r requirements.txt
+[ -f .env ] || cp .env.example .env
+```
+
+Windows 使用上面的“主应用安装”命令。编辑 `.env`：
+
+```dotenv
+QWEN_API_KEY=replace-with-your-qwen-api-key
+QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+QWEN_VL_MODEL=qwen3-vl-plus
+QWEN_OCR_MAX_PAGES=10
+```
+
+将占位值替换成自己的 Key，并确认对应模型可用。示例是中国内地北京地域兼容地址；其他地域按 DashScope 控制台配置。不要提交 `.env`。
+
+直接启动主应用，避免平台启动器尝试启动本地调度器：
+
+```sh
+# macOS / Linux
+.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+```powershell
+# Windows
+.\.venv\Scripts\python.exe -m uvicorn main:app --host 127.0.0.1 --port 8000
+```
+
+打开 [工作台](http://127.0.0.1:8000/home)，在“处理设置”中选 Qwen。调度器未连接的提示不影响云端 OCR 与图纸管理。页面图像会发送至 DashScope，分块补读可能增加调用次数与费用。
+
+## 常见问题
+
+| 现象 | 排查方式 |
+| --- | --- |
+| macOS 调度器未连接 | 用 `./start_macos.command` 启动；检查 `http://127.0.0.1:8090/health` 及 `~/Library/Logs/SolidCog/scheduler.log` |
+| 模型加载失败 | 核对 GGUF、视觉投影文件与 `LLAMA_SERVER_PATH`；模型文件不随代码下载 |
+| 本地模型切换慢 | 冷启动包含权重加载；先集中 OCR 再集中问答，减少切换 |
+| 任务忙碌时无法切换 | 等待当前任务完成；调度器在推理期间拒绝切换以保护资源 |
+| Qwen 配置或额度错误 | 核对 API Key、地域地址、模型权限与额度 |
+| MinerU 返回 404 / 解析结构不兼容 | WSL 检查旧 API 兼容性；macOS 应使用仓库包装服务及锁定依赖 |
+| Windows 网页问答失败 | 目前 Windows 调度器缺少流式代理接口，见上文限制 |
+| OCR 遗漏尺寸或页数不足 | 查看页面告警与原始输出；Qwen 页数由 `QWEN_OCR_MAX_PAGES` 控制，关键标注需要人工复核 |
+
+### 日志与服务地址
+
+| 项目 | 地址 / 位置 |
+| --- | --- |
+| 工作台 / API 文档 / 关于 | `:8000/home` / `:8000/docs` / `:8000/about` |
+| 调度器健康 / 状态 | `127.0.0.1:8090/health` / `127.0.0.1:8090/status` |
+| macOS 模型日志与切换记录 | `~/Library/Application Support/SolidCog/scheduler/` |
+| WSL 模型日志与切换记录 | `~/.local/share/solidcog/scheduler/` |
+| macOS MinerU 运行库版本 | 模型就绪后查看 `127.0.0.1:8200/health` 中的 `runtime_versions` |
+
+服务默认用于本机访问。本仓库没有开箱即用的公网账号、租户隔离或部署鉴权方案；对外提供服务前需要额外的部署设计，并保留 [MinerU 标识](attribution.md)。
