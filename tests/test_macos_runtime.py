@@ -44,6 +44,13 @@ class MacRuntimeTests(unittest.TestCase):
         self.assertIn('--app-dir "$ROOT/platforms/macos"', script)
         self.assertIn('scheduler_ready', script)
 
+    def test_mineru_engine_pin_matches_platform_documentation(self):
+        requirements = (ROOT / "platforms/macos/requirements.txt").read_text()
+        documentation = (ROOT / "platforms/macos/README.md").read_text()
+        version_pin = "mineru-llama-cpp==0.1.5"
+        self.assertIn(version_pin, requirements)
+        self.assertIn(version_pin, documentation)
+
 
 if __name__ == "__main__":
     unittest.main()
