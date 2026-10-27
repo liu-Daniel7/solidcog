@@ -34,8 +34,11 @@ def _csv_safe(value) -> str:
     text = str(value if value is not None else "")
     # Preserve ordinary signed engineering values (-0.2, +0.021 mm) while
     # neutralizing spreadsheet formulas.
-    if re.match(r"^[+-]\d", text):
-        return text
+    signed = re.match(r"^[+-]\d+(?:\.\d+)?", text)
+    if signed:
+        tail = text[signed.end():]
+        if not re.search(r"[=+@()|'\"!\\-]", tail):
+            return text
     if text.startswith(("=", "+", "-", "@", "\t", "\r")):
         return "'" + text
     return text

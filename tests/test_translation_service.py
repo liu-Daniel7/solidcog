@@ -195,6 +195,7 @@ class TranslationServiceTests(unittest.TestCase):
         self.assertEqual(translation._csv_safe("-0.2/0.1"), "-0.2/0.1")
         self.assertEqual(translation._csv_safe("-0.2 mm 公差"), "-0.2 mm 公差")
         self.assertEqual(translation._csv_safe("+0.021 公差"), "+0.021 公差")
+        self.assertTrue(translation._csv_safe("-2+cmd|' /C calc'!A0").startswith("'"))
 
     def test_csv_has_bom_and_bilingual_columns(self):
         with patch.object(translation.qwen_mt, "translate_text", return_value={"text": "Deburr", "input_tokens": 1, "output_tokens": 1}):
