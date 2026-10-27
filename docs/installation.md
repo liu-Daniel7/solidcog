@@ -109,7 +109,7 @@ bash mechvl_server/download_model.sh
 bash model_scheduler/setup.sh
 ```
 
-MechVL 安装脚本安装 CUDA PyTorch，并尝试安装 FlashAttention；不可用时回退到 SDPA。`download_model.sh` 从 Hugging Face 下载模型权重。更新现有环境前先停止 SolidCog 和 WSL 模型服务；不要删除已有模型缓存或项目数据。
+MechVL 安装脚本安装 CUDA PyTorch，并尝试安装 FlashAttention；不可用时回退到 SDPA。`download_model.sh` 从 Hugging Face 下载模型权重。更新现有环境前先停止 SolidCog 和 WSL 模型服务；不要删除已有模型缓存或项目数据。 WSL 调度器启动 MechVL 时启用 Hugging Face/Transformers 离线模式，直接读取本机缓存，避免在服务启动阶段因访问 Hub 超时；首次部署或更新权重时，需在网络可用时先运行 `download_model.sh`。
 
 **MinerU 需单独配置。** 调度器预期可执行文件位于 `~/.local/share/solidcog/mineru/.venv/bin/mineru-api`，并要求支持 `--enable-vlm-preload` 参数、`/file_parse` 及旧返回结构。当前已在 `mineru 3.4.5` 的现有 WSL 环境中完成一页真实 PDF 解析验证；这是已验证的兼容示例，不代表任意版本或全新安装自动满足契约。
 

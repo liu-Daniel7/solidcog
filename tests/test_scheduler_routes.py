@@ -25,6 +25,12 @@ class SchedulerRouteTests(unittest.TestCase):
                 spec.loader.exec_module(runtime)
             cls.runtimes.append(runtime)
 
+    def test_wsl_mechvl_loads_from_local_cache_without_hub_retries(self):
+        runtime = self.runtimes[0]
+        spec = runtime.build_scheduler().specs["mechvl"]
+        self.assertEqual(spec.env["HF_HUB_OFFLINE"], "1")
+        self.assertEqual(spec.env["TRANSFORMERS_OFFLINE"], "1")
+
     @staticmethod
     def request(client, operation):
         if operation == "MinerU OCR":
