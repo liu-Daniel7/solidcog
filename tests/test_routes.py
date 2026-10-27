@@ -48,8 +48,9 @@ class RouteTests(unittest.TestCase):
         self.assertNotIn('已载入图纸：', html)
         self.assertIn('aria-label="搜索关键词"', html)
         self.assertNotIn("{% include", html)
-        for control in ("upload-form", "select-drawing-btn", "clear-drawing-btn", "send-btn"):
+        for control in ("upload-form", "select-drawing-btn", "clear-drawing-btn", "send-btn", "qwen-key-form", "qwen-api-key", "qwen-key-save"):
             self.assertIn(f'id="{control}"', html)
+        self.assertIn('type="password"', html)
 
     def test_mineru_attribution_and_about_page(self):
         for path in ("/home", "/search?keyword=技术", "/about"):

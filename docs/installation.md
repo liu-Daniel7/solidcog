@@ -2,7 +2,7 @@
 
 [返回 README](../README.md)
 
-选择一种运行方式：Apple Silicon 本地模型、Windows / WSL2 本地模型，或仅使用云端 OCR。Qwen API Key 只在云端 OCR 中需要。
+选择一种运行方式：Apple Silicon 本地模型、Windows / WSL2 本地模型，或仅使用云端 OCR。Qwen API Key 在云端 OCR 或 Qwen-MT 通道中需要。
 
 ## macOS / Apple Silicon
 
@@ -141,10 +141,11 @@ Windows 使用上面的“主应用安装”命令。编辑 `.env`：
 QWEN_API_KEY=replace-with-your-qwen-api-key
 QWEN_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
 QWEN_VL_MODEL=qwen3-vl-plus
+QWEN_MT_MODEL=qwen-mt-plus
 QWEN_OCR_MAX_PAGES=10
 ```
 
-将占位值替换成自己的 Key，并确认对应模型可用。示例是中国内地北京地域兼容地址；其他地域按 DashScope 控制台配置。不要提交 `.env`。
+也可以先启动工作台，在右上角“处理设置”中填写 Key；保存后会写回本机 `.env`（POSIX 下权限 0600），页面只显示掩码。同一个 Key 默认同时供 Qwen-VL 与 Qwen-MT 使用；保存后可用“测试两个模型”验证。将占位值替换成自己的 Key，并确认对应模型可用。示例是中国内地北京地域兼容地址；其他地域按 DashScope 控制台配置。不要提交 `.env`。
 
 直接启动主应用，避免平台启动器尝试启动本地调度器：
 

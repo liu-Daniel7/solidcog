@@ -41,6 +41,50 @@ def _image_url(image: Image.Image) -> str:
     return f"data:image/png;base64,{encoded}"
 
 
+def _connection_image_url() -> str:
+    """Small valid image used only by the settings connection check."""
+    image = Image.new("RGB", (64, 64), "white")
+    try:
+        buffer = io.BytesIO()
+        image.save(buffer, format="PNG")
+        encoded = base64.b64encode(buffer.getvalue()).decode("ascii")
+    finally:
+        image.close()
+    return f"data:image/png;base64,{encoded}"
+
+
+def test_connection() -> dict:
+    """Verify that the saved key can reach the configured Qwen-VL model."""
+    try:
+        completion = _client().chat.completions.create(
+            model=config.QWEN_VL_MODEL,
+            messages=[{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": "这是一张连接测试图片。只回复 OK。"},
+                    {"type": "image_url", "image_url": {"url": _connection_image_url()}},
+                ],
+            }],
+            max_tokens=16,
+            timeout=20,
+        )
+        answer = (completion.choices[0].message.content or "").strip()
+        if not answer:
+            raise RuntimeError("Qwen-VL 返回空结果")
+        return {
+            "ok": True,
+            "model": config.QWEN_VL_MODEL,
+            "message": "连接正常",
+            "sample": answer[:80],
+        }
+    except Exception as exc:
+        return {
+            "ok": False,
+            "model": config.QWEN_VL_MODEL,
+            "message": str(_api_error(exc)),
+        }
+
+
 def _parse_json(text: str) -> dict:
     cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.I)
     try:
@@ -71,7 +115,7 @@ def _parse_json(text: str) -> dict:
 def _api_error(exc: Exception) -> RuntimeError:
     status = getattr(exc, "status_code", None)
     if status == 401:
-        return RuntimeError("Qwen API Key 无效，请检查 .env 中的 QWEN_API_KEY")
+        return RuntimeError("Qwen API Key 无效，请在右上角“处理设置”中重新填写")
     if status == 403:
         return RuntimeError("Qwen API 无可用额度，请充值或关闭阿里云控制台的“仅使用免费额度”模式")
     if status == 429:

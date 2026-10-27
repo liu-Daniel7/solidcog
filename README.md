@@ -41,6 +41,7 @@ SolidCog 把图纸上传、结构化文字识别、全文检索和图纸问答�
 | 上传与归档 | 拖放或批量选择文件，后台 OCR 队列、进度查询、部分失败提示与重试 |
 | 本地文字识别 | MinerU 输出统一的标题栏、技术要求、全文与布局信息，保留原始结构化结果 |
 | 云端文字识别 | 可选 DashScope Qwen3-VL，整页概览、重叠分块与重点区域补读 |
+| Qwen 通道配置 | 处理设置中填写一个 Key，保存后掩码显示并即时生效；同一 Key 可验证 Qwen-VL 与 Qwen-MT |
 | 图纸检索 | 按文件名和 OCR 文本搜索材料、图号、技术要求等内容 |
 | 查看与导出 | 独立 OCR 结果页、文字导出、图纸删除 |
 | 辅助审图 | MechVL 结合图纸预览、OCR 上下文和问题回答，支持选图与连续提问 |
@@ -58,7 +59,7 @@ SolidCog 把图纸上传、结构化文字识别、全文检索和图纸问答�
 | Windows / WSL2 | PyTorch / CUDA | Python 3.12、WSL2 Ubuntu、NVIDIA GPU；MinerU 接口兼容性需单独核对 | [Windows 安装与限制](docs/installation.md#windows--wsl2) |
 | 仅使用云端 OCR | 主应用 + DashScope | Python 3.12、Qwen API Key；不需要本地模型 | [云端 OCR 最小安装](docs/installation.md#仅使用云端-ocr) |
 
-**先选运行方式，再装依赖。** macOS 使用 `platforms/macos/requirements.txt`，Windows 主应用使用根目录 `requirements.txt`；DashScope Key 只在选择 Qwen 时需要。
+**先选运行方式，再装依赖。** macOS 使用 `platforms/macos/requirements.txt`，Windows 主应用使用根目录 `requirements.txt`；DashScope Key 在启用 Qwen 云端识别或 Qwen-MT 通道时需要。
 
 已安装环境的日常启动：
 
@@ -85,7 +86,7 @@ SolidCog 把图纸上传、结构化文字识别、全文检索和图纸问答�
 
 ## 开始处理图纸
 
-1. 打开右上角“处理设置”，选择 **MinerU 本地识别**或 **Qwen 云端识别**。
+1. 打开右上角“处理设置”，选择 **MinerU 本地识别**或 **Qwen 云端识别**；使用 Qwen 时在同一个面板填写 API Key，点击“确认”并验证两个模型。
 2. 拖入文件，点击“开始识别”，等待队列处理；部分失败时可查看原因并重试。
 3. 在图纸库检索图号、材料或技术要求，通过操作菜单查看和导出 OCR。
 4. 本地问答环境就绪后，点击图纸行的“审图”，或在助手中选择图纸，再输入问题。
@@ -117,6 +118,7 @@ flowchart TD
 | macOS MinerU 运行库 | `mineru-vl-utils[llama-cpp]==2.0.5`、`mineru-llama-cpp==0.1.5` |
 | MechVL-4B-RL | 机械图纸问答；macOS 默认使用 Q5 GGUF，WSL 使用 NF4 4-bit |
 | Qwen3-VL-Plus | 可选云端 OCR；由 `QWEN_VL_MODEL` 配置 |
+| Qwen-MT-Plus | 翻译模型通道；由 `QWEN_MT_MODEL` 配置，默认复用 Qwen-VL 的 Key 与接口 |
 
 模型名称、推理运行库和完整 MinerU 主程序是不同的版本维度。详见 [macOS 运行时说明](platforms/macos/README.md)。
 
@@ -135,7 +137,7 @@ flowchart TD
 | 图纸元数据与 OCR 文本 | `database.db` |
 | 上传原件 | `uploads/` |
 | MinerU 原始结构化输出 | `mineru_results/` |
-| API Key 与本地配置 | `.env`，不要提交到 Git |
+| API Key 与本地配置 | `.env`，不要提交到 Git；可在“处理设置”中填写，保存后仅显示掩码（POSIX 下文件权限 0600） |
 | 聊天记录 | 当前浏览器标签页的 `sessionStorage`，可手动清理 |
 | Qwen OCR 输入 | 选择 Qwen 时，图纸页面图像发送至 DashScope |
 

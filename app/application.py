@@ -5,7 +5,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app import config
 from app.database import init_database
-from app.routers import ai, drawings, pages
+from app.routers import ai, drawings, pages, settings
 
 
 def create_app() -> FastAPI:
@@ -17,4 +17,5 @@ def create_app() -> FastAPI:
     app.include_router(pages.router)
     app.include_router(drawings.router)
     app.include_router(ai.router)
+    app.include_router(settings.router)
     return app

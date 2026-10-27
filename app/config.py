@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi import HTTPException
 
 BASE_DIR = Path(__file__).resolve().parent.parent
+ENV_PATH = Path(os.getenv("SOLIDCOG_ENV_PATH", BASE_DIR / ".env")).resolve()
 
 
 def _load_env(path: Path) -> None:
@@ -18,7 +19,7 @@ def _load_env(path: Path) -> None:
         os.environ.setdefault(key.strip(), value)
 
 
-_load_env(BASE_DIR / ".env")
+_load_env(ENV_PATH)
 
 UPLOAD_DIR = Path(os.getenv("SOLIDCOG_UPLOAD_DIR", BASE_DIR / "uploads")).resolve()
 DATABASE_PATH = Path(os.getenv("SOLIDCOG_DATABASE_PATH", BASE_DIR / "database.db")).resolve()
@@ -30,6 +31,9 @@ QWEN_BASE_URL = os.getenv(
     "QWEN_BASE_URL", "https://dashscope.aliyuncs.com/compatible-mode/v1"
 )
 QWEN_VL_MODEL = os.getenv("QWEN_VL_MODEL", "qwen3-vl-plus")
+QWEN_MT_MODEL = os.getenv("QWEN_MT_MODEL", "qwen-mt-plus")
+QWEN_MT_BASE_URL = (os.getenv("QWEN_MT_BASE_URL") or QWEN_BASE_URL).rstrip("/")
+QWEN_MT_TIMEOUT_SECONDS = max(1, int(os.getenv("QWEN_MT_TIMEOUT_SECONDS", "60")))
 QWEN_OCR_MAX_PAGES = max(1, int(os.getenv("QWEN_OCR_MAX_PAGES", "10")))
 MECHVL_TIMEOUT_SECONDS = max(1, int(os.getenv("MECHVL_TIMEOUT_SECONDS", "180")))
 MODEL_SCHEDULER_BASE_URL = os.getenv(
@@ -49,7 +53,9 @@ PLACEHOLDER_VALUES = {
     "replace-with-your-qwen-api-key",
     "your-qwen-api-key",
 }
+
+
 def require_config(name: str, value: str) -> str:
     if not value or value.strip().lower() in PLACEHOLDER_VALUES:
-        raise HTTPException(500, f"Missing required configuration: {name}")
+        raise HTTPException(500, f"缺少必要配置：{name}，请在右上角“处理设置”中填写 Qwen API Key")
     return value
