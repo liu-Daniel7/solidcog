@@ -8,6 +8,7 @@ from fastapi import HTTPException, UploadFile
 from PIL import Image
 
 from app import config
+from app.repositories import completeness as completeness_repository
 from app.repositories import drawings as repository
 from app.repositories import translations as translations_repository
 from app.services import segments
@@ -119,12 +120,30 @@ def delete(drawing_id: int) -> None:
     drawing = repository.get(drawing_id)
     if not drawing:
         raise HTTPException(404, "未找到该图纸")
+    if completeness_repository.drawing_in_running_batch(drawing_id):
+        raise HTTPException(409, "该图纸正在用于齐套性检查，请等待检查完成后再删除")
+    completeness_repository.invalidate_for_drawing(
+        drawing_id, "原图纸已删除，该检查项已失效，请重新检查本批次"
+    )
+    completeness_repository.delete_evidence_for_drawing(drawing_id)
     (config.UPLOAD_DIR / drawing["filename"]).unlink(missing_ok=True)
     translations_repository.delete_for_drawing(drawing_id)
     repository.delete(drawing_id)
 
 
 def delete_all() -> None:
+    drawings = repository.list_all("ASC")
+    if any(
+        completeness_repository.drawing_in_running_batch(int(drawing["id"]))
+        for drawing in drawings
+    ):
+        raise HTTPException(409, "有图纸正在用于齐套性检查，请等待检查完成后再清空图纸库")
+    for drawing in drawings:
+        completeness_repository.invalidate_for_drawing(
+            int(drawing["id"]),
+            "原图纸已删除，该检查项已失效，请重新检查本批次",
+        )
+        completeness_repository.delete_evidence_for_drawing(int(drawing["id"]))
     filenames = repository.delete_all()
     translations_repository.delete_all()
     for filename in filenames:

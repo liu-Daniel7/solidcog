@@ -53,6 +53,10 @@ PREVIEW_DIR = Path(
 # accepting an unbounded number of OCR requests under concurrent uploads.
 MAX_CONCURRENT_OCR = max(1, int(os.getenv("MAX_CONCURRENT_OCR", "1")))
 MAX_BATCH_UPLOADS = max(1, int(os.getenv("MAX_BATCH_UPLOADS", "20")))
+MAX_COMPLETENESS_DRAWINGS = max(1, int(os.getenv("MAX_COMPLETENESS_DRAWINGS", "100")))
+COMPLETENESS_DIMENSION_MAX_PAGES = max(
+    1, int(os.getenv("COMPLETENESS_DIMENSION_MAX_PAGES", "8"))
+)
 PLACEHOLDER_VALUES = {
     "replace-with-your-qwen-api-key",
     "your-qwen-api-key",
