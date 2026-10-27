@@ -56,6 +56,25 @@
                             </div>
                             <p id="backend-note" class="setting-note">图纸在本地识别，无需发送到云端。</p>
                         </div>
+                        <div class="control-group qwen-key-group">
+                            <div class="credential-heading">
+                                <span class="control-label">Qwen API Key</span>
+                                <span id="qwen-key-badge" class="credential-badge" data-tone="empty">未配置</span>
+                            </div>
+                            <form id="qwen-key-form" class="credential-form" method="post" action="/settings/qwen" autocomplete="off">
+                                <div class="api-key-row">
+                                    <input class="field" type="password" id="qwen-api-key" placeholder="sk-..." autocomplete="new-password" spellcheck="false" aria-label="Qwen API Key">
+                                    <button class="button button-primary" id="qwen-key-save" type="submit">确认</button>
+                                </div>
+                                <p id="qwen-key-note" class="setting-note">保存到本机 .env，仅显示掩码；同一个 Key 将用于 Qwen-VL 图纸识别，并供 Qwen-MT 翻译通道复用。</p>
+                                <div class="credential-actions">
+                                    <button class="text-link" id="qwen-key-test" type="button" disabled>测试两个模型</button>
+                                    <button class="text-link delete-link" id="qwen-key-clear" type="button" disabled>清除 Key</button>
+                                </div>
+                            </form>
+                            <div id="qwen-key-result" class="credential-result" role="status" aria-live="polite" hidden></div>
+                            <div id="qwen-model-tests" class="model-test-list" aria-live="polite" hidden></div>
+                        </div>
                         <div class="control-group">
                             <span class="control-label">本地模型</span>
                             <div class="segmented" aria-label="本地模型模式">
@@ -219,6 +238,15 @@
             const uploadButtonLabel = document.getElementById('upload-button-label');
             const progress = document.getElementById('upload-progress');
             const settings = document.getElementById('model-settings');
+            const qwenKeyForm = document.getElementById('qwen-key-form');
+            const qwenKeyInput = document.getElementById('qwen-api-key');
+            const qwenKeySave = document.getElementById('qwen-key-save');
+            const qwenKeyTest = document.getElementById('qwen-key-test');
+            const qwenKeyClear = document.getElementById('qwen-key-clear');
+            const qwenKeyBadge = document.getElementById('qwen-key-badge');
+            const qwenKeyNote = document.getElementById('qwen-key-note');
+            const qwenKeyResult = document.getElementById('qwen-key-result');
+            const qwenModelTests = document.getElementById('qwen-model-tests');
             let modalReturnFocus = null;
             let allDrawings = [...pageDrawingList];
             let drawingListLoaded = false;
@@ -230,6 +258,8 @@
             let modelSwitchInFlight = false;
             let uploadInFlight = false;
             let chatInFlight = false;
+            let qwenStatus = { configured: false };
+            let qwenTestInFlight = false;
 
             const stageLabels = {
                 queued: '正在排队',
@@ -306,6 +336,147 @@
                 }
             }
 
+            function apiErrorMessage(data, status) {
+                const detail = data && data.detail;
+                if (typeof detail === 'string') return detail;
+                if (Array.isArray(detail)) return detail.map(function (item) { return item.msg || String(item); }).join('；');
+                return `HTTP ${status}`;
+            }
+
+            function setQwenResult(message, tone) {
+                qwenKeyResult.hidden = !message;
+                qwenKeyResult.textContent = message || '';
+                qwenKeyResult.dataset.tone = tone || 'info';
+            }
+
+            function renderQwenStatus(data) {
+                qwenStatus = data && typeof data === 'object' ? data : { configured: false };
+                const configured = Boolean(qwenStatus.configured);
+                qwenKeyBadge.textContent = configured ? '已配置' : '未配置';
+                qwenKeyBadge.dataset.tone = configured ? 'ready' : 'empty';
+                qwenKeyInput.value = '';
+                qwenKeyInput.placeholder = configured ? `已保存 ${qwenStatus.masked_key || '••••••••••••'}` : 'sk-...';
+                qwenKeyNote.textContent = configured
+                    ? `接口 ${qwenStatus.base_host || ''} · 已保存到本机 .env（仅掩码显示）· 同一 Key 同时用于 ${qwenStatus.vl_model || 'Qwen-VL'} 和 ${qwenStatus.mt_model || 'Qwen-MT'}。`
+                    : '保存到本机 .env，仅显示掩码；同一个 Key 将用于 Qwen-VL 图纸识别，并供 Qwen-MT 翻译通道复用。';
+                qwenKeyTest.disabled = !configured || qwenTestInFlight;
+                qwenKeyClear.disabled = !configured || qwenTestInFlight;
+            }
+
+            function renderQwenTests(data) {
+                qwenModelTests.replaceChildren();
+                [
+                    { key: 'qwen_vl', label: 'Qwen-VL', model: data.qwen_vl?.model || qwenStatus.vl_model },
+                    { key: 'qwen_mt', label: 'Qwen-MT', model: data.qwen_mt?.model || qwenStatus.mt_model }
+                ].forEach(function (item) {
+                    const result = data[item.key] || {};
+                    const row = document.createElement('div');
+                    row.className = 'model-test-item';
+                    const name = document.createElement('span');
+                    name.className = 'model-test-name';
+                    name.textContent = `${item.label} · ${item.model || '未配置'}`;
+                    const status = document.createElement('span');
+                    status.className = 'model-test-status';
+                    status.dataset.ok = String(Boolean(result.ok));
+                    status.textContent = result.ok ? '正常' : (result.message || '验证失败');
+                    row.appendChild(name);
+                    row.appendChild(status);
+                    qwenModelTests.appendChild(row);
+                });
+                qwenModelTests.hidden = false;
+            }
+
+            async function loadQwenStatus() {
+                try {
+                    const response = await fetch('/settings/qwen', { headers: { 'Accept': 'application/json' } });
+                    const data = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+                    renderQwenStatus(data);
+                } catch (error) {
+                    qwenKeyBadge.textContent = '读取失败';
+                    qwenKeyBadge.dataset.tone = 'error';
+                    setQwenResult(`无法读取 Qwen 配置：${error.message}`, 'error');
+                }
+            }
+
+            async function testQwenModels() {
+                if (qwenTestInFlight || !qwenStatus.configured) return;
+                qwenTestInFlight = true;
+                qwenKeyTest.disabled = true;
+                qwenKeyClear.disabled = true;
+                qwenKeyTest.textContent = '验证中…';
+                setQwenResult('正在验证 Qwen-VL 和 Qwen-MT 两个模型…', 'loading');
+                try {
+                    const response = await fetch('/settings/qwen/test', { method: 'POST', headers: { 'Accept': 'application/json' } });
+                    const data = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+                    renderQwenTests(data);
+                    setQwenResult(data.ok ? '两个模型均可用，同一个 Key 已生效。' : 'Key 已保存，但至少一个模型验证失败，请查看下方原因。', data.ok ? 'ready' : 'error');
+                } catch (error) {
+                    qwenModelTests.hidden = true;
+                    setQwenResult(`模型验证失败：${error.message}`, 'error');
+                } finally {
+                    qwenTestInFlight = false;
+                    qwenKeyTest.textContent = '测试两个模型';
+                    renderQwenStatus(qwenStatus);
+                }
+            }
+
+            async function saveQwenKey(event) {
+                event.preventDefault();
+                const key = qwenKeyInput.value.trim();
+                if (!key) {
+                    setQwenResult('请输入 Qwen API Key。', 'error');
+                    qwenKeyInput.focus();
+                    return;
+                }
+                let saved = false;
+                qwenKeySave.disabled = true;
+                qwenKeySave.textContent = '保存中…';
+                qwenKeyInput.disabled = true;
+                qwenKeyTest.disabled = true;
+                qwenKeyClear.disabled = true;
+                setQwenResult('正在保存 Key…', 'loading');
+                try {
+                    const response = await fetch('/settings/qwen', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                        body: JSON.stringify({ api_key: key })
+                    });
+                    const data = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+                    saved = true;
+                    renderQwenStatus(data);
+                    setQwenResult('Key 已保存并立即生效，正在验证两个模型…', 'ready');
+                    await testQwenModels();
+                } catch (error) {
+                    setQwenResult(`保存失败：${error.message}`, 'error');
+                } finally {
+                    qwenKeyInput.disabled = false;
+                    qwenKeySave.disabled = false;
+                    qwenKeySave.textContent = '确认';
+                    if (saved) qwenKeyInput.value = '';
+                }
+            }
+
+            async function clearQwenKey() {
+                if (!qwenStatus.configured) return;
+                if (!confirm('确定清除本机保存的 Qwen API Key 吗？清除后 Qwen 识别和翻译将不可用。')) return;
+                qwenKeyClear.disabled = true;
+                qwenKeyTest.disabled = true;
+                setQwenResult('正在清除 Key…', 'loading');
+                try {
+                    const response = await fetch('/settings/qwen', { method: 'DELETE', headers: { 'Accept': 'application/json' } });
+                    const data = await response.json().catch(function () { return {}; });
+                    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
+                    qwenModelTests.hidden = true;
+                    renderQwenStatus(data);
+                    setQwenResult('Key 已清除，本机不再使用 Qwen 云端通道。', 'info');
+                } catch (error) {
+                    setQwenResult(`清除失败：${error.message}`, 'error');
+                }
+            }
+
             async function switchModel(mode) {
                 if (modelSwitchInFlight) return;
                 modelSwitchInFlight = true;
@@ -313,7 +484,7 @@
                 try {
                     const response = await fetch(`/local-model/switch/${mode}`, { method: 'POST' });
                     const data = await response.json().catch(function () { return {}; });
-                    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+                    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
                     schedulerSnapshot = data;
                     schedulerSyncedAt = performance.now();
                     renderModelStatus();
@@ -826,6 +997,9 @@
             }
 
             selectDrawingBtn.addEventListener('click', openDrawingModal);
+            qwenKeyForm.addEventListener('submit', saveQwenKey);
+            qwenKeyTest.addEventListener('click', testQwenModels);
+            qwenKeyClear.addEventListener('click', clearQwenKey);
             modeButtons.forEach(function (button) {
                 button.addEventListener('click', function () { switchModel(button.dataset.modelMode); });
             });
@@ -895,7 +1069,7 @@
                 while (true) {
                     const response = await fetch(`/upload-jobs/${encodeURIComponent(jobId)}`, { headers: { 'Accept': 'application/json' } });
                     const data = await response.json().catch(function () { return {}; });
-                    if (!response.ok) throw new Error(data.detail || `HTTP ${response.status}`);
+                    if (!response.ok) throw new Error(apiErrorMessage(data, response.status));
                     progress.textContent = `${data.status === 'queued' ? '排队中' : '处理中'}：${data.completed}/${data.total}（${data.progress}%）${data.current_file ? ` · ${data.current_file}` : ''}`;
                     if (['completed', 'partial', 'failed'].includes(data.status)) {
                         if (data.status === 'failed') throw new Error(data.errors?.[0]?.error || '全部文件处理失败');
@@ -932,6 +1106,7 @@
             fetchDrawingList().then(function () {
                 if (selectedDrawingId === null) restoreChatState();
             }).catch(function () { /* Page data remains available. */ });
+            loadQwenStatus();
             syncModelStatus();
             window.setInterval(renderModelStatus, 1000);
             window.setInterval(function () {

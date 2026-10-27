@@ -53,6 +53,7 @@ class ModelServiceTests(unittest.TestCase):
 
     def test_expected_model_defaults(self):
         self.assertEqual(config.QWEN_VL_MODEL, "qwen3-vl-plus")
+        self.assertEqual(config.QWEN_MT_MODEL, "qwen-mt-plus")
 
     def test_mineru_markdown_adapter_preserves_engineering_fields(self):
         markdown = """# 技术要求

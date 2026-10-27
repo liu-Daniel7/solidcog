@@ -399,6 +399,129 @@ summary::-webkit-details-marker {
     margin: 8px 0 0;
 }
 
+.credential-heading {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+}
+
+.credential-heading .control-label {
+    margin-bottom: 0;
+}
+
+.credential-badge {
+    padding: 2px 7px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    background: #f5f6f0;
+    color: var(--muted);
+    font-size: 10px;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+
+.credential-badge[data-tone="ready"] {
+    border-color: #d5e4b4;
+    background: var(--primary-soft);
+    color: #52693a;
+}
+
+.credential-badge[data-tone="error"] {
+    border-color: #ead0c8;
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.api-key-row {
+    display: flex;
+    gap: 8px;
+    align-items: stretch;
+}
+
+.api-key-row .field {
+    min-width: 0;
+}
+
+.api-key-row .button {
+    flex: 0 0 auto;
+    min-width: 64px;
+    padding-inline: 14px;
+}
+
+.credential-actions {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    margin-top: 2px;
+}
+
+.credential-actions .text-link {
+    padding: 4px 0;
+}
+
+.credential-result {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border: 1px solid var(--line);
+    border-radius: 7px;
+    background: #f5f6f0;
+    color: var(--muted);
+    font-size: 11px;
+    line-height: 1.55;
+    overflow-wrap: anywhere;
+}
+
+.credential-result[data-tone="loading"] {
+    border-color: #eadfbf;
+    background: #fffaf0;
+    color: #795d2a;
+}
+
+.credential-result[data-tone="ready"] {
+    border-color: #d5e4b4;
+    background: var(--primary-soft);
+    color: #52693a;
+}
+
+.credential-result[data-tone="error"] {
+    border-color: #ead0c8;
+    background: var(--danger-soft);
+    color: var(--danger);
+}
+
+.model-test-list {
+    display: grid;
+    gap: 6px;
+    margin-top: 10px;
+}
+
+.model-test-item {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 6px 8px;
+    border-radius: 6px;
+    background: #f7f8f3;
+    font-size: 10px;
+}
+
+.model-test-name {
+    color: var(--muted);
+    overflow-wrap: anywhere;
+}
+
+.model-test-status {
+    flex: 0 0 auto;
+    color: var(--danger);
+    text-align: right;
+}
+
+.model-test-status[data-ok="true"] {
+    color: #52693a;
+}
+
 .model-state {
     margin-top: 22px;
     padding-top: 16px;
