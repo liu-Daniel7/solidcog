@@ -32,8 +32,14 @@ class TranslationGuardTests(unittest.TestCase):
         cases = {
             "硬度250HBW": "250HBW",
             "材料35CrMo": "35CrMo",
+            "材料2A12": "2A12",
+            "材料H62": "H62",
             "质量0.18kg": "0.18kg",
+            "角度25°": "25°",
+            "浓度5%": "5%",
+            "表面0.8μm": "0.8μm",
             "孔径φ25 +0.021": "φ25 +0.021",
+            "尺寸25 ±0.02 mm": "25 ±0.02 mm",
         }
         for source, token in cases.items():
             with self.subTest(source=source):
@@ -42,6 +48,7 @@ class TranslationGuardTests(unittest.TestCase):
     def test_hardness_and_mass_substitution_are_flagged(self):
         self.assertTrue(any("工程数据" in issue for issue in validate("硬度250HBW", "Hardness 300 HBW")))
         self.assertTrue(any("工程数据" in issue for issue in validate("质量0.18kg", "Mass 0.4 lb")))
+        self.assertTrue(any("工程数据" in issue for issue in validate("尺寸25 ±0.02 mm", "Dimension 35 ±0.02 mm")))
         self.assertTrue(any("千克" in issue for issue in validate("质量0.18kg", "Mass 0.18 kg to 0.4 lb")))
 
     def test_tokens_adjacent_to_chinese_are_found(self):

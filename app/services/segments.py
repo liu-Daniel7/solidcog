@@ -77,7 +77,12 @@ FIELD_ALIASES = {
 _ALIASES = sorted(FIELD_ALIASES.items(), key=lambda item: len(item[0]), reverse=True)
 _HEADER_TOKENS = {
     "标记", "处数", "分区", "更改文件号", "签名", "年月日", "标准化",
-    "阶段标记", "工艺", "共张第张", "共页第页",
+    "阶段标记", "工艺", "共", "共张第", "共张第张", "共页第页",
+}
+_PARAMETER_TOKENS = {
+    "齿廓", "齿数", "模数", "螺旋角", "压力角", "齿厚", "跨齿数", "跨球",
+    "精度等级", "检测项目", "允许值", "配对齿轮", "顶隙系数", "变位系数",
+    "中心距", "公法线", "球径", "代号",
 }
 _CJK = re.compile(r"[\u3400-\u9fff]")
 _COPYRIGHT = re.compile(r"版权|著作权|COPYRIGHT|PROPERTY", re.I)
@@ -101,9 +106,16 @@ def _field_label(cell: str) -> str | None:
     compact = _compact(cell)
     if not compact:
         return None
+    if "SHEET" in compact or re.match(r"^第\s*\d+\s*页", compact):
+        return "页码"
     for alias, label in _ALIASES:
-        if alias in compact:
-            return label
+        if compact == alias or compact.startswith(alias):
+            remainder = compact[len(alias):]
+            # Allow a label plus an English suffix such as "图名DRAWING NAME",
+            # but do not treat a parameter-table label such as "检测项目" as
+            # the title field "项目".
+            if not _CJK.search(remainder):
+                return label
     if re.search(r"(?:公司|集团|厂|大学|学院|COMPANY|GROUP)$", compact):
         return "单位"
     return None
@@ -149,7 +161,15 @@ def _append_unique(rows: list[dict], label: str, text: str, seen: set[tuple[str,
 
 def _split_title_line(line: str) -> list[str]:
     if "|" in line:
-        return [cell.strip() for cell in line.split("|") if cell.strip()]
+        cells = []
+        for cell in line.split("|"):
+            cell = cell.strip()
+            colon = re.match(r"^([^：:]{1,30})[：:]\s*(.+)$", cell)
+            if colon:
+                cells.extend([colon.group(1).strip(), colon.group(2).strip()])
+            elif cell:
+                cells.append(cell)
+        return cells
     colon = re.match(r"^([^：:]{1,30})[：:]\s*(.+)$", line)
     if colon:
         return [colon.group(1).strip(), colon.group(2).strip()]
@@ -168,7 +188,7 @@ def _title_rows(text: str) -> list[dict]:
             line = line.strip()
             if not line or _is_frame_noise(line):
                 continue
-            if _COPYRIGHT.search(line):
+            if _COPYRIGHT.search(line) or any(token in line for token in _PARAMETER_TOKENS):
                 continue
             cells = _split_title_line(line)
             if not cells:
@@ -306,14 +326,29 @@ def _extra_rows(text: str, title_text: str, tech_text: str, tech_rows: list[dict
     return rows
 
 
+def _looks_like_part_name(line: str) -> bool:
+    value = line.strip()
+    if not value or "|" in value or len(_CJK.findall(value)) < 2 or len(_CJK.findall(value)) > 12:
+        return False
+    return not _is_header_cell(value) and not _is_frame_noise(value)
+
+
 def _fallback_title(text: str) -> str:
+    lines = (text or "").splitlines()
     selected = []
-    for line in (text or "").splitlines():
-        cells = _split_title_line(line.strip())
-        if any(_field_label(cell) or _is_header_cell(cell) for cell in cells):
-            selected.append(line)
-        elif re.search(r"(?:公司|集团|厂|大学|学院|COMPANY|GROUP)\s*$", _compact(line), re.I):
-            selected.append(line)
+    has_name = False
+    for index, line in enumerate(lines):
+        value = line.strip()
+        if not value or any(token in value for token in _PARAMETER_TOKENS):
+            continue
+        cells = _split_title_line(value)
+        is_title_line = any(_field_label(cell) or _is_header_cell(cell) for cell in cells)
+        is_unit_line = bool(re.search(r"(?:公司|集团|厂|大学|学院|COMPANY|GROUP)\s*$", _compact(value), re.I))
+        if is_title_line or is_unit_line:
+            selected.append(value)
+            if is_unit_line and not has_name and index + 1 < len(lines) and _looks_like_part_name(lines[index + 1]):
+                selected.append(f"图名 | {lines[index + 1].strip()}")
+                has_name = True
     return "\n".join(selected)
 
 

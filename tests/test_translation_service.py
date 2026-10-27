@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -70,6 +71,22 @@ class TranslationServiceTests(unittest.TestCase):
         payload = translation.get_translation_payload(self.drawing_id)
         self.assertGreater(payload["summary"]["missing"], 0)
 
+    def test_placeholder_only_or_mixed_chinese_output_needs_review(self):
+        source = "检查GB/T 1804"
+        self.assertFalse(translation._has_target_text(source, "GB/T 1804"))
+        self.assertFalse(translation._has_target_text("去毛刺", "Deburr 去毛刺"))
+        self.assertTrue(translation._has_target_text("去毛刺", "Deburr"))
+
+    def test_chunking_preserves_decimal_and_standard_tokens(self):
+        text = "尺寸25.4和0.18，按GB/T 1804.5执行。" + ("A" * 2990)
+        chunks = translation._chunk_text(text)
+        joined = "".join(chunks)
+        self.assertIn("25.4", joined)
+        self.assertIn("0.18", joined)
+        self.assertIn("GB/T 1804.5", joined)
+        self.assertNotIn("25. 4", joined)
+        self.assertNotIn("0. 18", joined)
+
     def test_long_segment_is_split_into_multiple_mt_requests(self):
         drawing_id = drawings_repository.create({
             "filename": "long.pdf",
@@ -98,7 +115,8 @@ class TranslationServiceTests(unittest.TestCase):
 
         def fake_translate(text, **kwargs):
             calls.append((text, kwargs))
-            return {"text": f"EN: {text}", "input_tokens": 10, "output_tokens": 5}
+            markers = re.findall(r"SCGPH\d{4}", text)
+            return {"text": "Deburr " + " ".join(markers), "input_tokens": 10, "output_tokens": 5}
 
         with patch.object(translation.qwen_mt, "translate_text", side_effect=fake_translate):
             first = translation.translate_drawing(self.drawing_id)
@@ -117,7 +135,8 @@ class TranslationServiceTests(unittest.TestCase):
 
         def fake_translate(text, **kwargs):
             calls.append(text)
-            return {"text": f"EN: {text}", "input_tokens": 1, "output_tokens": 1}
+            markers = re.findall(r"SCGPH\d{4}", text)
+            return {"text": "Deburr " + " ".join(markers), "input_tokens": 1, "output_tokens": 1}
 
         with patch.object(translation.qwen_mt, "translate_text", side_effect=fake_translate):
             translation.translate_drawing(self.drawing_id)
@@ -169,6 +188,8 @@ class TranslationServiceTests(unittest.TestCase):
         ensure_segments(drawing_id)
         content, _ = translation.export_csv(drawing_id)
         self.assertIn("'=HYPERLINK", content)
+        self.assertEqual(translation._csv_safe("-0.2"), "-0.2")
+        self.assertEqual(translation._csv_safe("+0.021 mm"), "+0.021 mm")
 
     def test_csv_has_bom_and_bilingual_columns(self):
         with patch.object(translation.qwen_mt, "translate_text", return_value={"text": "Deburr", "input_tokens": 1, "output_tokens": 1}):

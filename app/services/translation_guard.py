@@ -9,11 +9,12 @@ from __future__ import annotations
 
 import re
 
-_UNIT_ALTS = r"mm|cm|m|in|inch|inches|kg|g|mg|t|MPa|kPa|Pa|N|kN|rpm|min|s|h|L|mL|ml|°C|℃|lb|lbs|psi"
+_UNIT_ALTS = r"mm|cm|m|in|inch|inches|kg|g|mg|t|MPa|kPa|Pa|N|kN|rpm|min|s|h|L|mL|ml|°C|℃|°|%|μm|um|lb|lbs|psi"
 
 _TOKEN_PATTERNS = [
     re.compile(r"(?:⌀|Φ|φ|Ø)\s*\d+(?:\.\d+)?"),
     re.compile(r"±\s*\d+(?:\.\d+)?\s*(?:" + _UNIT_ALTS + r")?"),
+    re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*±\s*\d+(?:\.\d+)?\s*(?:" + _UNIT_ALTS + r")?(?![A-Za-z0-9])"),
     re.compile(r"(?<![A-Za-z0-9])(?:Ra|Rz)\s*\d+(?:\.\d+)?(?![A-Za-z0-9])", re.I),
     re.compile(r"(?<![A-Za-z0-9])(?:HRC|HRA|HRB|HBW|HBS|HB|HV)\s*\d+(?:\.\d+)?(?![A-Za-z0-9])", re.I),
     re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*(?:HRC|HRA|HRB|HBW|HBS|HB|HV)(?![A-Za-z0-9])", re.I),
@@ -23,7 +24,7 @@ _TOKEN_PATTERNS = [
     re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*[+-]\s*\d+(?:\.\d+)?(?:\s*(?:" + _UNIT_ALTS + r"))?(?![A-Za-z0-9])", re.I),
     re.compile(r"(?<![\d.])[+-]\s*\d+(?:\.\d+)?(?![.\d])"),
     re.compile(r"(?<![A-Za-z0-9])(?:GB|JB|ISO|DIN|ASTM|ANSI|JIS|EN)\s*(?:/\s*T)?\s*[A-Z0-9][A-Z0-9.\-—–]*(?![A-Za-z0-9])", re.I),
-    re.compile(r"(?<![A-Za-z0-9])(?:Q\d+[A-Z]?|\d{2,3}(?:Cr|Mn|Ni|Mo|Si|Ti|V|W|B|Al|Cu)[A-Za-z0-9]*|40Cr|20CrMnTi|45#|06Cr19Ni10|304|316L|6061|7075|HT200|QT\d+-\d+)(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![A-Za-z0-9])(?:Q\d+[A-Z]?|\d{2,3}(?:Cr|Mn|Ni|Mo|Si|Ti|V|W|B|Al|Cu)[A-Za-z0-9]*|\dA\d{2}|H62|1Cr18Ni9Ti|40Cr|20CrMnTi|45#|06Cr19Ni10|304|316L|6061|7075|HT200|QT\d+-\d+)(?![A-Za-z0-9])", re.I),
     re.compile(r"(?<![A-Za-z0-9])[A-Z]{1,8}(?:-[A-Z0-9]{1,12}){2,}(?![A-Za-z0-9])"),
     re.compile(r"(?<![A-Za-z0-9])[A-Z]{2,8}\d{2,}(?:[.-]\d+)*(?![A-Za-z0-9])"),
     re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*[×x]\s*\d+(?:\.\d+)?(?![\d.])"),

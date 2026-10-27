@@ -31,6 +31,10 @@ A | CFC | 初版 |"""
         segments = build_segments("设计 | 张三\n图名 | 面板8")
         labels = {segment["label"]: segment["source_text"] for segment in segments}
         self.assertEqual(labels["设计"], "张三")
+        mixed = build_segments("图名：面板8 | 图号：LJT01.01")
+        mixed_labels = {segment["label"]: segment["source_text"] for segment in mixed}
+        self.assertEqual(mixed_labels["图名"], "面板8")
+        self.assertEqual(mixed_labels["图号"], "LJT01.01")
 
     def test_all_text_only_fallback_recovers_title_and_requirements(self):
         all_text = "技术要求\n1. 去毛刺\n2. 热处理\n图名 | 面板8\n折弯图"
@@ -44,6 +48,30 @@ A | CFC | 初版 |"""
                 ("extra", "全文补充", "折弯图"),
             ],
         )
+
+    def test_all_text_fallback_rejects_parameter_table_fields(self):
+        all_text = """齿廓 | 渐开线 | 齿数 | z | 29
+检测项目(组) | 代号 | 允许值
+配对齿轮 | 图号 |
+45 | 合肥工业大学
+圆柱直齿轮
+标记 | 处数 | 分区 | 更改文件号 | 签名 | 年月日
+设计 | (签名) | (年月日) | 标准化 | (签名) | (年月日) | 阶段标记 | 质量 | 比例
+制图 | LJT01.01
+审核 |
+工艺 | 批准 | 共 张 第 张 | # #
+技术要求
+1. 去毛刺
+2. 热处理
+"""
+        segments = build_segments("", "", all_text)
+        labels = {segment["label"]: segment["source_text"] for segment in segments if segment["section"] == "title"}
+        self.assertEqual(labels["材料"], "45")
+        self.assertEqual(labels["单位"], "合肥工业大学")
+        self.assertEqual(labels["图名"], "圆柱直齿轮")
+        self.assertEqual(labels["图号"], "LJT01.01")
+        self.assertNotIn("配对齿轮", labels.get("图号", ""))
+        self.assertNotIn("代号", labels.get("项目", ""))
 
     def test_technical_notes_keep_numbering_and_merge_continuations(self):
         tech = """技术要求：

@@ -17,7 +17,7 @@ from app import config
 from app.repositories import drawings as drawings_repository
 from app.repositories import translations as repository
 from app.services import qwen_mt, segments as segment_service
-from app.services.translation_guard import protect, restore, validate
+from app.services.translation_guard import protect, protected_tokens, restore, validate
 
 LOGGER = logging.getLogger(__name__)
 PROVIDER = "qwen-mt"
@@ -32,6 +32,10 @@ DOMAIN_PROMPT = (
 )
 def _csv_safe(value) -> str:
     text = str(value if value is not None else "")
+    # Preserve ordinary signed engineering values (-0.2, +0.021 mm) while
+    # neutralizing spreadsheet formulas.
+    if re.fullmatch(r"[+-]\d+(?:\.\d+)?(?:\s*(?:mm|cm|m|kg|g|MPa|N|°|%|μm|um))?", text):
+        return text
     if text.startswith(("=", "+", "-", "@", "\t", "\r")):
         return "'" + text
     return text
@@ -70,11 +74,20 @@ def _error_message(exc: Exception) -> str:
     return message[:500]
 
 
+def _has_target_text(source: str, translated: str) -> bool:
+    if re.search(r"[\u3400-\u9fff]", translated or ""):
+        return False
+    residue = translated or ""
+    for token in protected_tokens(source):
+        residue = residue.replace(token, " ")
+    return bool(re.search(r"[A-Za-z]{2,}", residue))
+
+
 def _chunk_text(text: str, limit: int = MAX_TRANSLATION_CHARS) -> list[str]:
     """Split long OCR blocks without cutting a protected placeholder."""
     if len(text) <= limit:
         return [text]
-    parts = re.split(r"(?<=[。！？；;.!?])\s*|\n+", text)
+    parts = re.split(r"(?<=[。！？；;!?])\s*|(?<=\.)\s+|\n+", text)
     chunks: list[str] = []
     current = ""
     for raw_part in parts:
@@ -83,6 +96,12 @@ def _chunk_text(text: str, limit: int = MAX_TRANSLATION_CHARS) -> list[str]:
             continue
         while len(part) > limit:
             cut = limit
+            # Never split a decimal number or a protected placeholder at the
+            # hard character boundary.
+            while cut > 0 and cut < len(part) and part[cut - 1].isdigit() and part[cut].isdigit():
+                cut -= 1
+            while cut > 0 and cut < len(part) and (part[cut - 1] == "." or part[cut] == "."):
+                cut -= 1
             for marker in re.finditer(r"SCGPH\d{4}", part):
                 if marker.start() < cut < marker.end():
                     cut = marker.start()
@@ -150,7 +169,7 @@ def _translate_one(segment: dict, target_lang: str, glossary: list[dict]) -> dic
         if re.search(r"[\u3400-\u9fff]", source):
             if restored.strip() == source.strip():
                 issues.append("译文与原文相同，可能未翻译")
-            elif not re.search(r"[A-Za-z]", restored):
+            elif not _has_target_text(source, restored):
                 issues.append("译文未包含目标语言文本")
         return {
             "translated_text": restored,
