@@ -129,6 +129,13 @@ A | CFC | 初版 |"""
         self.assertEqual(labels["图名"], "法兰盘")
         self.assertEqual(labels["图号"], "LJT04.17")
 
+    def test_common_cast_materials_are_not_misread_as_drawing_numbers(self):
+        segments = build_segments("QT600\n凸轮轴\nLJT03.22")
+        labels = {segment["label"]: segment["source_text"] for segment in segments}
+        self.assertEqual(labels["材料"], "QT600")
+        self.assertEqual(labels["图名"], "凸轮轴")
+        self.assertEqual(labels["图号"], "LJT03.22")
+
     def test_source_hash_is_stable_and_source_sensitive(self):
         self.assertEqual(source_hash("去毛刺"), source_hash(" 去毛刺 "))
         self.assertNotEqual(source_hash("去毛刺"), source_hash("去毛边"))

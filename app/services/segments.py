@@ -155,7 +155,7 @@ def _is_frame_noise(line: str) -> bool:
     stripped = line.strip()
     if not stripped:
         return True
-    if re.fullmatch(r"[A-Z0-9|/\-.\s]{1,5}", stripped):
+    if re.fullmatch(r"[A-Z0-9]", stripped):
         return True
     if _PAGE_MARKER.match(stripped):
         return True
@@ -197,6 +197,26 @@ def _split_title_line(line: str) -> list[str]:
     return [line]
 
 
+def _infer_standalone_label(line: str) -> str | None:
+    value = line.strip()
+    compact = _compact(value)
+    if not value or "\t" in value:
+        return None
+    if re.match(r"^\d+\s*[.、)]", value):
+        return None
+    if re.search(r"(?:公司|集团|厂|大学|学院|COMPANY|GROUP)$", compact, re.I):
+        return "单位"
+    if re.fullmatch(r"(?:Q\d+[A-Z]?|HT\d+|QT\d+(?:-\d+)?|45|40Cr|20CrMnTi|06Cr19Ni10|2A12|H62|T12A|ZCuSn\d+Pb\d+)", value, re.I):
+        return "材料"
+    if re.fullmatch(r"[A-Z]{2,8}\d{2,}(?:[.-]\d+)*", value, re.I):
+        return "图号"
+    if re.search(r"共\s*张|共\s*页|第\s*张|第\s*页|阶段标记|比例|质量", value):
+        return None
+    if 2 <= len(_CJK.findall(value)) <= 12:
+        return "图名"
+    return None
+
+
 def _title_rows(text: str) -> list[dict]:
     rows: list[dict] = []
     seen: set[tuple[str, str]] = set()
@@ -206,6 +226,8 @@ def _title_rows(text: str) -> list[dict]:
             if not line or _is_frame_noise(line):
                 continue
             if _COPYRIGHT.search(line):
+                continue
+            if re.search(r"签名|年月日|标准化|阶段标记", line):
                 continue
             cells = _split_title_line(line)
             if not cells:
@@ -220,10 +242,10 @@ def _title_rows(text: str) -> list[dict]:
             if not any(labels):
                 if re.search(r"初版|第\s*\w+\s*版|CFC|REV", line, re.I):
                     _append_unique(rows, "版次记录", " | ".join(cells), seen)
-                elif len(cells) == 1 and 2 <= len(_CJK.findall(line)) <= 40:
-                    _append_unique(rows, "图名", line, seen)
                 else:
-                    _append_unique(rows, "标题栏", " | ".join(cells), seen)
+                    inferred = _infer_standalone_label(line)
+                    if inferred:
+                        _append_unique(rows, inferred, line, seen)
                 continue
 
             used: set[int] = set()
@@ -281,6 +303,9 @@ def _title_rows(text: str) -> list[dict]:
 def _tech_rows(text: str) -> list[dict]:
     rows: list[dict] = []
     seen: set[tuple[str, str]] = set()
+    seen_numbers: set[int] = set()
+    max_number = 0
+    stopped = False
     for block in re.split(r"\n\s*\n", text or ""):
         block = block.strip()
         if not block:
@@ -289,10 +314,21 @@ def _tech_rows(text: str) -> list[dict]:
         numbered = list(re.finditer(r"(?m)^\s*(\d{1,3})\s*[.、)]\s*", block))
         if numbered:
             for position, match in enumerate(numbered):
+                number = int(match.group(1))
+                # Qwen sometimes repeats a whole requirement list in a second
+                # OCR view. Once the numbering goes backwards, keep the first
+                # complete list and stop rather than adding truncated copies.
+                if number in seen_numbers or (max_number and number <= max_number):
+                    stopped = True
+                    break
+                seen_numbers.add(number)
+                max_number = max(max_number, number)
                 end = numbered[position + 1].start() if position + 1 < len(numbered) else len(block)
                 body = re.sub(r"\s+", " ", block[match.end():end]).strip()
                 if body:
-                    _append_unique(rows, f"第 {match.group(1)} 条", body, seen)
+                    _append_unique(rows, f"第 {number} 条", body, seen)
+            if stopped:
+                break
         else:
             body = re.sub(r"\s+", " ", block).strip()
             if body:
@@ -325,6 +361,8 @@ def _extra_rows(text: str, title_text: str, tech_text: str, tech_rows: list[dict
         if re.fullmatch(r"第\s*\d+\s*页", line):
             continue
         if "|" in line or r"\(" in line or r"\[" in line:
+            continue
+        if line in {"制图", "设计", "审核", "批准", "工艺"}:
             continue
         if len(line) > 40 or not _EXTRA_LABEL.search(line):
             continue
