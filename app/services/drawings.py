@@ -22,9 +22,25 @@ _OCR_GATE = threading.BoundedSemaphore(config.MAX_CONCURRENT_OCR)
 LOGGER = logging.getLogger(__name__)
 
 
+def _drawing_title(row: dict) -> str:
+    """Return the title-block part name, independent of the uploaded filename."""
+    return segments.extract_title(
+        str(row.get("title_text") or ""),
+        str(row.get("all_text") or ""),
+    )
+
+
 def template_rows(rows: list[dict]) -> list[tuple]:
     return [
-        (index, row["filename"], row["file_type"], row["file_size"], row["upload_time"], row["id"])
+        (
+            index,
+            row["filename"],
+            row["file_type"],
+            row["file_size"],
+            row["upload_time"],
+            row["id"],
+            _drawing_title(row),
+        )
         for index, row in enumerate(rows, 1)
     ]
 

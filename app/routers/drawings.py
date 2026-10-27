@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
 from app import config
 
@@ -7,6 +7,7 @@ from app.repositories import drawings as repository
 from app.security import verify_local_request
 from app.services import drawings as service
 from app.services import jobs
+from app.services import previews
 
 router = APIRouter()
 
@@ -41,8 +42,19 @@ def upload_job_status(job_id: str):
 
 @router.get("/drawings")
 def list_drawings():
-    rows = repository.list_all("ASC")
-    drawings = [{"编号": index, "id": row["id"], "文件名": row["filename"], "文件类型": row["file_type"], "文件大小(字节)": row["file_size"], "上传时间": row["upload_time"]} for index, row in enumerate(rows, 1)]
+    rows = service.template_rows(repository.list_all("ASC"))
+    drawings = [
+        {
+            "编号": row[0],
+            "id": row[5],
+            "文件名": row[1],
+            "图纸名称": row[6],
+            "文件类型": row[2],
+            "文件大小(字节)": row[3],
+            "上传时间": row[4],
+        }
+        for row in rows
+    ]
     return {"图纸数量": len(drawings), "图纸信息": drawings}
 
 
@@ -62,6 +74,16 @@ def delete_drawing_from_page(drawing_id: int):
 def delete_all_drawings():
     service.delete_all()
     return RedirectResponse("/home", 303)
+
+
+@router.get("/drawings/{drawing_id}/preview")
+def drawing_preview(drawing_id: int):
+    path = previews.get_preview(drawing_id)
+    return FileResponse(
+        path,
+        media_type="image/jpeg",
+        headers={"Cache-Control": "private, max-age=3600"},
+    )
 
 
 @router.get("/ocr/{drawing_id}")
