@@ -1095,16 +1095,18 @@
                 return target && target.closest ? target.closest('[data-preview-url]') : null;
             }
 
-            document.addEventListener('pointerover', function (event) {
+            function handlePreviewOver(event) {
                 const trigger = previewTriggerFrom(event.target);
                 if (!trigger || (event.relatedTarget && trigger.contains(event.relatedTarget))) return;
                 showDrawingPreview(trigger, event.clientX, event.clientY);
-            });
-            document.addEventListener('pointerout', function (event) {
+            }
+
+            function handlePreviewOut(event) {
                 const trigger = previewTriggerFrom(event.target);
                 if (trigger && !trigger.contains(event.relatedTarget)) hideDrawingPreview();
-            });
-            document.addEventListener('pointermove', function (event) {
+            }
+
+            function handlePreviewMove(event) {
                 if (previewCard.hidden) return;
                 previewX = event.clientX;
                 previewY = event.clientY;
@@ -1114,7 +1116,16 @@
                         positionDrawingPreview();
                     });
                 }
-            });
+            }
+
+            document.addEventListener('pointerover', handlePreviewOver);
+            document.addEventListener('pointerout', handlePreviewOut);
+            document.addEventListener('pointermove', handlePreviewMove);
+            // Mouse-event fallback keeps hover working in older WebViews and
+            // in browser automation that does not synthesize PointerEvent.
+            document.addEventListener('mouseover', handlePreviewOver);
+            document.addEventListener('mouseout', handlePreviewOut);
+            document.addEventListener('mousemove', handlePreviewMove);
             document.addEventListener('focusin', function (event) {
                 const trigger = previewTriggerFrom(event.target);
                 if (!trigger) return;
