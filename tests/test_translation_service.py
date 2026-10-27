@@ -1,6 +1,7 @@
 import re
 import tempfile
 import unittest
+from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
@@ -60,7 +61,7 @@ class TranslationServiceTests(unittest.TestCase):
     def test_source_change_refreshes_segments_and_invalidates_translation(self):
         with patch.object(translation.qwen_mt, "translate_text", return_value={"text": "Panel 8", "input_tokens": 1, "output_tokens": 1}):
             translation.translate_drawing(self.drawing_id)
-        with database.connect() as connection:
+        with closing(database.connect()) as connection, connection:
             connection.execute(
                 "UPDATE drawings SET title_text=? WHERE id=?",
                 ("图名 | 新面板", self.drawing_id),

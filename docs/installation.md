@@ -58,14 +58,13 @@ LLAMA_SERVER_PATH=/opt/homebrew/bin/llama-server
 
 ## Windows / WSL2
 
-### 当前兼容性限制
+### 当前兼容性边界
 
-这条路径保留了既有 CUDA 实现，但目前有两个需要明确的限制：
+- **MechVL 流式问答已接通。** WSL MechVL 服务通过 `/analyze/stream` 返回 Server-Sent Events；WSL 模型调度器 `/mechvl/analyze/stream` 负责加载/切换模型并转发事件，供主应用 `/chat-with-drawing/stream` 使用。CUDA 不可用或模型加载失败时，本地问答仍不可用。
+- **MinerU 需要匹配旧接口。** 调度器启动 `~/.local/share/solidcog/mineru/.venv/bin/mineru-api`，并调用 `/file_parse`，依赖 `--enable-vlm-preload` 参数及旧响应结构。不能假定任意 MinerU 4.x 完整服务兼容；更新 MinerU 前应先检查这份 API 契约。
+- **模型权重独立于代码。** `mechvl_server/download_model.sh` 从 Hugging Face 下载 MechVL；权重不随仓库发布。MinerU 安装和模型缓存也需单独准备。
 
-1. 调度器调用 MinerU 旧 `/file_parse` API，安装未锁定版本的 `mineru[all]` 可能得到不兼容的完整 4.x 服务。仓库尚未提供锁定并重新验证的 WSL MinerU 安装组合。
-2. 工作台调用 `/chat-with-drawing/stream`，主应用再调用调度器 `/mechvl/analyze/stream`；Windows 调度器当前只有非流式 `/mechvl/analyze`。因此非流式服务可单独调用，但不能把网页问答视为已就绪。
-
-全新部署需要先解决上述接口兼容性。只需要上传、识别和检索时，可以先使用[云端 OCR](#仅使用云端-ocr)。
+只需要上传、识别和检索时，也可以先使用[云端 OCR](#仅使用云端-ocr)。
 
 ### 基础环境
 
@@ -110,9 +109,9 @@ bash mechvl_server/download_model.sh
 bash model_scheduler/setup.sh
 ```
 
-MechVL 安装脚本安装 CUDA PyTorch，并尝试安装 FlashAttention；不可用时回退到 SDPA。权重通过 Hugging Face 下载。
+MechVL 安装脚本安装 CUDA PyTorch，并尝试安装 FlashAttention；不可用时回退到 SDPA。`download_model.sh` 从 Hugging Face 下载模型权重。更新现有环境前先停止 SolidCog 和 WSL 模型服务；不要删除已有模型缓存或项目数据。
 
-**MinerU 需单独配置。** 调度器预期可执行文件位于 `~/.local/share/solidcog/mineru/.venv/bin/mineru-api`，并要求支持 `--enable-vlm-preload` 参数、`/file_parse` 及旧返回结构。请使用经过核对的兼容环境；不能仅安装最新版来满足该契约。
+**MinerU 需单独配置。** 调度器预期可执行文件位于 `~/.local/share/solidcog/mineru/.venv/bin/mineru-api`，并要求支持 `--enable-vlm-preload` 参数、`/file_parse` 及旧返回结构。当前已在 `mineru 3.4.5` 的现有 WSL 环境中完成一页真实 PDF 解析验证；这是已验证的兼容示例，不代表任意版本或全新安装自动满足契约。
 
 兼容环境准备完成后，在 Windows 仓库根目录运行：
 
@@ -120,7 +119,25 @@ MechVL 安装脚本安装 CUDA PyTorch，并尝试安装 FlashAttention；不可
 .\start_server.bat
 ```
 
-启动器会尝试在 WSL 后台启动调度器。需要前台诊断时使用 `start_scheduler_wsl.bat`。Windows 网页流式问答限制仍见本节开头。
+启动器会尝试在 WSL 后台启动调度器。需要前台诊断时使用 `start_scheduler_wsl.bat`。调度器健康状态可在 `http://127.0.0.1:8090/status` 查看；首次切换模型会加载权重，耗时取决于模型缓存和磁盘速度。
+
+### 验证记录（2026-10-27）
+
+在 Windows + WSL2、RTX 4060 Laptop 8 GB 上完成以下验证（复用既有环境，并非全新安装）：
+
+| 组件 | 本机实测版本 |
+| --- | --- |
+| Windows 主应用 Python | 3.12.14 |
+| WSL Python | 3.12.3 |
+| PyTorch / CUDA | 2.11.0+cu128 |
+| Transformers / bitsandbytes | 5.16.1 / 0.50.2 |
+| MinerU / mineru-vl-utils | 3.4.5 / 1.2.1 |
+
+- 主应用全套 Python 回归测试通过；调度器 `/mechvl/analyze/stream` 的中文 SSE 转发、上游失败资源释放和忙碌拒绝有自动化测试。
+- MechVL 使用现有缓存启动成功，CUDA 与 FlashAttention 2 可用；真实图纸问答经调度器返回 27 个 SSE 数据事件。
+- MinerU 使用 `mineru 3.4.5`，真实单页 PDF 经 `/file_parse` 返回完整结果，冷启动至返回结果约 84 秒，包含模型切换、预载和解析，不是纯 OCR 推理耗时。
+
+本机 WSL 无法访问 Hugging Face 时，模型加载使用的是已有缓存；重新部署时需联网下载权重。上述记录证明这套本机环境可用，不构成对其他 MinerU 安装、模型缓存或图纸识别准确率的保证。
 
 ## 仅使用云端 OCR
 
@@ -171,7 +188,7 @@ QWEN_OCR_MAX_PAGES=10
 | 任务忙碌时无法切换 | 等待当前任务完成；调度器在推理期间拒绝切换以保护资源 |
 | Qwen 配置或额度错误 | 核对 API Key、地域地址、模型权限与额度 |
 | MinerU 返回 404 / 解析结构不兼容 | WSL 检查旧 API 兼容性；macOS 应使用仓库包装服务及锁定依赖 |
-| Windows 网页问答失败 | 目前 Windows 调度器缺少流式代理接口，见上文限制 |
+| Windows 网页问答失败 | 检查 `/local-model/status`、WSL 调度器 8090、MechVL 8100 和模型加载日志；流式转发路径见上文 |
 | OCR 遗漏尺寸或页数不足 | 查看页面告警与原始输出；Qwen 页数由 `QWEN_OCR_MAX_PAGES` 控制，关键标注需要人工复核 |
 
 ### 日志与服务地址

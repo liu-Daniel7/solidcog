@@ -70,5 +70,50 @@ class SchedulerRouteTests(unittest.TestCase):
                     scheduler.end_operation.assert_called_once_with()
 
 
+    def test_wsl_stream_forwards_utf8_and_releases_operation(self):
+        runtime = self.runtimes[0]
+        upstream = Mock()
+        wire = 'data: {"token":"图纸"}\n\ndata: [DONE]\n\n'
+        upstream.iter_lines.return_value = wire.encode().splitlines()
+        scheduler = Mock()
+        payload = {"question": "test", "ocr_context": "", "image_base64": "test"}
+        with patch.object(runtime, "scheduler", scheduler), patch.object(
+            runtime.session, "post", return_value=upstream
+        ) as post:
+            response = TestClient(runtime.app).post("/mechvl/analyze/stream", json=payload)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.text, wire)
+        self.assertTrue(response.headers["content-type"].startswith("text/event-stream"))
+        post.assert_called_once_with("http://127.0.0.1:8100/analyze/stream",
+                                    json=payload, stream=True, timeout=(10, 600))
+        upstream.close.assert_called_once_with()
+        scheduler.end_operation.assert_called_once_with()
+
+    def test_wsl_stream_rejection_preserves_another_operation(self):
+        runtime = self.runtimes[0]
+        scheduler = Mock()
+        scheduler.begin_operation.side_effect = RuntimeError("busy")
+        with patch.object(runtime, "scheduler", scheduler), patch.object(runtime.session, "post") as post:
+            response = TestClient(runtime.app).post("/mechvl/analyze/stream",
+                                                   json={"question": "test", "image_base64": "test"})
+        self.assertEqual(response.status_code, 503)
+        scheduler.end_operation.assert_not_called()
+        post.assert_not_called()
+
+    def test_wsl_stream_http_failure_closes_upstream(self):
+        runtime = self.runtimes[0]
+        scheduler = Mock()
+        upstream = Mock()
+        upstream.raise_for_status.side_effect = runtime.requests.HTTPError("unavailable")
+        with patch.object(runtime, "scheduler", scheduler), patch.object(
+            runtime.session, "post", return_value=upstream
+        ):
+            response = TestClient(runtime.app).post("/mechvl/analyze/stream",
+                                                   json={"question": "test", "image_base64": "test"})
+        self.assertEqual(response.status_code, 503)
+        upstream.close.assert_called_once_with()
+        scheduler.end_operation.assert_called_once_with()
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,15 +2,17 @@ import base64
 import gc
 import importlib.util
 import io
+import json
 import logging
 import os
 import threading
 
 import torch
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import StreamingResponse
 from PIL import Image
 from pydantic import BaseModel
-from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig
+from transformers import AutoModelForImageTextToText, AutoProcessor, BitsAndBytesConfig, TextIteratorStreamer
 
 MODEL_ID = os.getenv("MECHVL_MODEL_ID", "XiaofengAlg/MechVL-4B-RL")
 MAX_NEW_TOKENS = int(os.getenv("MECHVL_MAX_NEW_TOKENS", "128"))
@@ -79,17 +81,13 @@ def health():
     }
 
 
-@app.post("/analyze")
-def analyze(request: AnalyzeRequest):
-    if not inference_lock.acquire(blocking=False):
-        raise HTTPException(409, "model is busy")
+def _prepare_inputs(request: AnalyzeRequest):
     try:
-        try:
-            image = Image.open(io.BytesIO(base64.b64decode(request.image_base64, validate=True))).convert("RGB")
-        except Exception as exc:
-            raise HTTPException(400, "invalid image_base64") from exc
+        image = Image.open(io.BytesIO(base64.b64decode(request.image_base64, validate=True))).convert("RGB")
+    except Exception as exc:
+        raise HTTPException(400, "invalid image_base64") from exc
 
-        prompt = f"""你是机械工程图纸分析助手。严格根据图纸图像和 OCR 内容回答问题；依据不足时明确说明，不得编造尺寸、材料、公差或标准条款。
+    prompt = f"""你是机械工程图纸分析助手。严格根据图纸图像和 OCR 内容回答问题；依据不足时明确说明，不得编造尺寸、材料、公差或标准条款。
 
 OCR 内容：
 {request.ocr_context}
@@ -98,17 +96,25 @@ OCR 内容：
 {request.question}
 
 请用简洁、专业、可执行的中文回答。"""
-        messages = [{"role": "user", "content": [
-            {"type": "image", "image": image},
-            {"type": "text", "text": prompt},
-        ]}]
-        inputs = processor.apply_chat_template(
-            messages,
-            tokenize=True,
-            add_generation_prompt=True,
-            return_dict=True,
-            return_tensors="pt",
-        ).to(model.device)
+    messages = [{"role": "user", "content": [
+        {"type": "image", "image": image},
+        {"type": "text", "text": prompt},
+    ]}]
+    return processor.apply_chat_template(
+        messages,
+        tokenize=True,
+        add_generation_prompt=True,
+        return_dict=True,
+        return_tensors="pt",
+    ).to(model.device)
+
+
+@app.post("/analyze")
+def analyze(request: AnalyzeRequest):
+    if not inference_lock.acquire(blocking=False):
+        raise HTTPException(409, "model is busy")
+    try:
+        inputs = _prepare_inputs(request)
         with torch.inference_mode():
             generated = model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False)
         trimmed = [output[len(source):] for source, output in zip(inputs.input_ids, generated)]
@@ -119,3 +125,42 @@ OCR 内容：
         raise HTTPException(507, "CUDA out of memory") from exc
     finally:
         inference_lock.release()
+
+
+@app.post("/analyze/stream")
+def analyze_stream(request: AnalyzeRequest):
+    if not inference_lock.acquire(blocking=False):
+        raise HTTPException(409, "model is busy")
+    try:
+        inputs = _prepare_inputs(request)
+        streamer = TextIteratorStreamer(processor.tokenizer, skip_prompt=True, skip_special_tokens=True)
+        errors = []
+
+        def generate():
+            try:
+                with torch.inference_mode():
+                    model.generate(**inputs, max_new_tokens=MAX_NEW_TOKENS, do_sample=False, streamer=streamer)
+            except Exception as exc:
+                logger.exception("MechVL streaming generation failed")
+                errors.append("CUDA out of memory" if isinstance(exc, torch.OutOfMemoryError) else str(exc))
+                streamer.end()
+            finally:
+                inference_lock.release()
+
+        worker = threading.Thread(target=generate, daemon=True)
+        worker.start()
+    except BaseException:
+        inference_lock.release()
+        raise
+
+    def events():
+        for token in streamer:
+            if token:
+                yield f"data: {json.dumps({'token': token}, ensure_ascii=False)}\n\n"
+        worker.join()
+        if errors:
+            yield f"data: {json.dumps({'error': errors[0]}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
