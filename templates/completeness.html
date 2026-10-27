@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f5f4ef">
+    <title>齐套性检查 · SolidCog</title>
+    <style>
+{% include 'styles/workbench.css' %}
+{% include 'styles/completeness.css' %}
+    </style>
+</head>
+<body>
+{% macro icon(name) -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% if name == 'check' %}<path d="m4 12 5 5L20 6"/><path d="M4 4h6M4 19h8"/>
+{% elif name == 'plus' %}<path d="M12 5v14M5 12h14"/>
+{% elif name == 'arrow' %}<path d="M5 12h14m-5-5 5 5-5 5"/>
+{% elif name == 'file' %}<path d="M13 3H5v18h14V9l-6-6Zm0 0v6h6M8 13h8M8 17h5"/>
+{% elif name == 'search' %}<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/>
+{% elif name == 'close' %}<path d="m6 6 12 12M6 18 18 6"/>
+{% elif name == 'trash' %}<path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 10v7M14 10v7"/>
+{% elif name == 'shield' %}<path d="m12 3 8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"/><path d="m8.5 12 2.3 2.3 4.7-5"/>
+{% elif name == 'camera' %}<path d="M4 8h3l1.5-2h7L17 8h3v11H4V8Z"/><circle cx="12" cy="13" r="3.2"/>
+{% elif name == 'layers' %}<path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 12 9 5 9-5M3 16l9 5 9-5"/>
+{% endif %}
+</svg>
+{%- endmacro %}
+{% set selected_title = batch.rules.required_title_fields if batch is defined and batch else default_rules.required_title_fields %}
+{% set selected_bom = batch.rules.bom_required_columns if batch is defined and batch else default_rules.bom_required_columns %}
+{% set dimension_checked = batch.rules.dimension_check if batch is defined and batch else default_rules.dimension_check %}
+    <a class="skip-link" href="#check-content">跳到齐套性检查</a>
+    <div class="app">
+        <header class="topbar">
+            <a class="brand" href="/home" aria-label="SolidCog 工作台首页">
+                <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="m16 3 11.3 6.5v13L16 29 4.7 22.5v-13L16 3Z" stroke="currentColor" stroke-width="1.8"/><path d="m4.7 9.5 11.3 7 11.3-7M16 16.5V29M16 3v13.5" stroke="currentColor" stroke-width="1.8"/><path d="m10.3 6.3 11.4 7v12.5" stroke="currentColor" stroke-width="1.3"/></svg></span>
+                <span class="brand-title">SolidCog<span>工程图纸智能工作台</span></span>
+            </a>
+            <nav class="main-nav" aria-label="主导航">
+                <a class="nav-link" href="/home">{{ icon('file') }}图纸库</a>
+                <a class="nav-link active" href="/completeness">{{ icon('check') }}齐套性检查</a>
+                <a class="nav-link" href="/home#assistant">{{ icon('layers') }}图纸问答</a>
+            </nav>
+            <div class="topbar-actions">
+                <a class="button button-secondary" href="/home">返回图纸库</a>
+            </div>
+        </header>
+
+        <main class="check-workspace" id="check-content">
+        {% if batch is defined and batch %}
+            {% set is_running = batch.status == 'running' %}
+            {% set has_results = summary.total > 0 %}
+            <section class="batch-head">
+                <div>
+                    <div class="check-eyebrow">COMPLETENESS CHECK / BATCH {{ batch.id }}</div>
+                    <h1>{{ batch.name }}</h1>
+                    <p>规则版本 v{{ batch.rules_version }} · 创建于 {{ batch.created_at }} · {{ batch.scope_note }}</p>
+                </div>
+                <div class="batch-actions">
+                    <span class="status-pill tone-{{ 'running' if is_running else ('passed' if batch.status == 'completed' else ('missing' if batch.status == 'failed' else 'neutral')) }}" data-batch-status="{{ batch.status }}">{{ batch.status_label }}</span>
+                    <form class="inline-form" action="/completeness/batches/{{ batch.id }}/start" method="post">
+                        <button class="button button-primary" type="submit" {% if is_running or not members %}disabled{% endif %}>{{ '检查中…' if is_running else ('重新检查' if has_results else '开始检查') }} {{ icon('arrow') }}</button>
+                    </form>
+                    <a class="button button-secondary" href="/completeness/batches/{{ batch.id }}/report.csv" {% if not has_results %}aria-disabled="true" onclick="return false;"{% endif %}>导出 CSV</a>
+                    <form class="inline-form" action="/completeness/batches/{{ batch.id }}/delete" method="post" onsubmit="return confirm('确定删除这个检查批次及其结果吗？原图和原始 OCR 不会被删除。')">
+                        <button class="button button-quiet danger-button" type="submit" {% if is_running %}disabled{% endif %}>{{ icon('trash') }}删除批次</button>
+                    </form>
+                </div>
+            </section>
+
+            {% if error %}<div class="alert" role="alert"><strong>操作未完成</strong><span>{{ error }}</span></div>{% endif %}
+            {% if message %}<div class="alert info" role="status">{{ message }}</div>{% endif %}
+            {% if batch.error %}<div class="alert" role="alert"><strong>批次提示</strong><span>{{ batch.error }}</span></div>{% endif %}
+            {% if batch.status == 'stale' and not batch.error %}<div class="alert info" role="status"><strong>结果已失效</strong><span>规则或批次图纸已变化，下面的结果来自旧版本，请重新检查后再作为依据。</span></div>{% endif %}
+            {% if is_running %}<div class="running-note" role="status"><span class="spinner" aria-hidden="true"></span><span>正在检查本批次图纸，请勿关闭页面。完成后将自动刷新。</span></div>{% endif %}
+
+            <section class="scope-ribbon" aria-label="检查范围">
+                {{ icon('shield') }}
+                <span><strong>检查范围已限定：</strong>{{ batch.scope_note }} 图纸库中未选入的文件不会被匹配或计为提交。</span>
+            </section>
+
+            <section class="summary-grid" aria-label="检查结果汇总">
+                <div class="summary-card" data-tone="neutral"><span>检查项总数</span><strong>{{ summary.total }}</strong></div>
+                <div class="summary-card" data-tone="passed"><span>已通过</span><strong>{{ summary.passed }}</strong></div>
+                <div class="summary-card" data-tone="missing"><span>明确缺失</span><strong>{{ summary.missing }}</strong></div>
+                <div class="summary-card" data-tone="pending"><span>待确认</span><strong>{{ summary.pending }}</strong></div>
+                <div class="summary-card" data-tone="failed"><span>检查失败</span><strong>{{ summary.failed }}</strong></div>
+            </section>
+
+            <section class="scope-panel" aria-labelledby="scope-title">
+                <div class="scope-panel-head"><strong id="scope-title">本批次图纸（{{ members|length }}）</strong><span>起始图：{% if batch.start_drawing_ids %}{{ batch.start_drawing_ids|length }} 张已指定{% else %}未指定，自动从无上级引用的图纸开始{% endif %}</span></div>
+                <div class="member-chips">
+                    {% for drawing in members %}
+                    <span class="member-chip" title="{{ drawing.filename }}"><span>{{ drawing.display_title }}</span>{% if drawing.id in batch.start_drawing_ids %}<em>起始</em>{% endif %}</span>
+                    {% else %}
+                    <span class="meta">本批次暂无图纸。</span>
+                    {% endfor %}
+                </div>
+            </section>
+
+            <details class="rules-box" {% if not has_results %}open{% endif %}>
+                <summary>检查规则 <span>规则 v{{ batch.rules_version }} · 修改后需重新检查</span></summary>
+                <div class="rules-content">
+                    <form action="/completeness/batches/{{ batch.id }}/rules" method="post">
+                        <div class="rule-group">
+                            <span class="check-section-label">标题栏必填字段</span>
+                            <div class="rule-options">
+                                {% for field in title_catalog %}
+                                <label class="rule-chip"><input type="checkbox" name="required_title_fields" value="{{ field.key }}" {% if field.key in selected_title %}checked{% endif %}>{{ field.label }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="rule-group">
+                            <span class="check-section-label">明细表必填列</span>
+                            <div class="rule-options">
+                                {% for column in bom_catalog %}
+                                <label class="rule-chip"><input type="checkbox" name="bom_required_columns" value="{{ column.key }}" {% if column.key in selected_bom %}checked{% endif %}>{{ column.label }}</label>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        <div class="rule-group">
+                            <span class="check-section-label">尺寸标注</span>
+                            <div class="rule-options">
+                                <label class="rule-chip"><input type="checkbox" name="dimension_check" {% if dimension_checked %}checked{% endif %}>启用疑似漏尺寸视觉复核</label>
+                            </div>
+                            <p class="rule-note">尺寸检查只做“是否存在足够视觉证据供人工复核”的辅助扫描，不判断尺寸数值、公差、设计正确性或整张图已齐全。当前 OCR 没有坐标时，结果一律标为待确认。</p>
+                        </div>
+                        <div class="form-actions">
+                            <button class="button button-primary" type="submit" {% if is_running %}disabled{% endif %}>保存规则</button>
+                            <span class="picker-count">保存会递增规则版本；旧结果保留但标记为失效，需重新检查。</span>
+                        </div>
+                    </form>
+                </div>
+            </details>
+
+            <section class="panel results-panel" aria-labelledby="results-title">
+                <div class="results-toolbar">
+                    <h2 id="results-title">检查明细 <span class="count-badge">{{ results|length }}</span></h2>
+                    <label class="visually-hidden" for="result-status-filter">按状态筛选</label>
+                    <select class="field select" id="result-status-filter">
+                        <option value="">全部状态</option>
+                        <option value="passed">已通过</option>
+                        <option value="missing">明确缺失</option>
+                        <option value="pending">待确认</option>
+                        <option value="failed">检查失败</option>
+                    </select>
+                    <label class="visually-hidden" for="result-kind-filter">按类别筛选</label>
+                    <select class="field select" id="result-kind-filter">
+                        <option value="">全部类别</option>
+                        {% for key, label in kind_labels.items() %}
+                        <option value="{{ key }}">{{ label }}</option>
+                        {% endfor %}
+                    </select>
+                    <label class="visually-hidden" for="result-review-filter">按人工确认筛选</label>
+                    <select class="field select" id="result-review-filter">
+                        <option value="">全部确认状态</option>
+                        <option value="unconfirmed">未确认</option>
+                        <option value="confirmed">已确认有效</option>
+                        <option value="dismissed">已排除</option>
+                    </select>
+                    <label class="visually-hidden" for="result-search">搜索检查结果</label>
+                    <input class="field" id="result-search" type="search" placeholder="搜索检查项或来源…">
+                    <span class="result-count" id="result-count">显示 {{ results|length }} / {{ results|length }}</span>
+                </div>
+                {% if results %}
+                <div class="results-table-wrap">
+                    <table class="results-table">
+                        <caption class="visually-hidden">齐套性检查结果及证据入口</caption>
+                        <thead><tr><th scope="col">状态</th><th scope="col">类别 / 位置</th><th scope="col">检查项</th><th scope="col">来源</th><th scope="col">信心</th><th scope="col">证据与操作</th></tr></thead>
+                        <tbody id="result-rows">
+                        {% for result in results %}
+                            <tr class="result-row" data-result-id="{{ result.id }}" data-status="{{ result.status }}" data-kind="{{ result.kind }}" data-confirmed="{{ result.confirmed_status }}" data-search="{{ (result.title ~ ' ' ~ result.detail ~ ' ' ~ result.source_filename ~ ' ' ~ result.field_name)|lower }}">
+                                <td data-label="状态"><span class="status-pill tone-{{ result.status }}">{{ result.status_label }}</span><span class="review-badge" data-state="{{ result.confirmed_status }}">{{ result.confirmation_label }}</span></td>
+                                <td data-label="类别/位置"><span>{{ result.kind_label }}</span><span class="result-location">{{ result.location }}</span></td>
+                                <td data-label="检查项"><strong class="result-title">{{ result.title }}</strong><span class="result-detail">{{ result.detail|truncate(170, True, '…') }}</span></td>
+                                <td data-label="来源"><span class="result-source"><strong title="{{ result.source_filename }}">{{ result.source_filename or '批次级结果' }}</strong>{% if result.target_filename %}<small>匹配：{{ result.target_filename }}</small>{% endif %}</span></td>
+                                <td data-label="信心"><span class="confidence">{% if result.confidence is not none %}规则信心 {{ '%.0f'|format(result.confidence * 100) }}%{% else %}未提供{% endif %}</span></td>
+                                <td data-label="证据与操作">
+                                    <div class="result-actions">
+                                        <button class="small-link evidence-open" type="button" data-result-id="{{ result.id }}">查看原图证据</button>
+                                        {% if result.source_drawing_id %}<a class="small-link" href="/view-ocr/{{ result.source_drawing_id }}">原始 OCR</a>{% endif %}
+                                    </div>
+                                </td>
+                            </tr>
+                        {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                <div class="empty-check filtered-out" id="filtered-empty"><strong>没有符合筛选条件的结果</strong><p>调整状态、类别或搜索词后再试。</p></div>
+                {% else %}
+                <div class="empty-check">
+                    <strong>{% if is_running %}正在建立检查结果…{% else %}还没有检查结果{% endif %}</strong>
+                    <p>{% if is_running %}检查完成后会显示标题栏、明细表、图纸引用和尺寸复核的逐项证据。{% else %}确认本批次选入的图纸和规则后，点击“开始检查”。{% endif %}</p>
+                </div>
+                {% endif %}
+            </section>
+
+            <div class="status-legend">
+                <span><strong>已通过</strong> 已有证据支持存在性或已填写</span>
+                <span><strong>明确缺失</strong> 明确为空或本批次内确实找不到引用图纸</span>
+                <span><strong>待确认</strong> 证据不足、结构不清或需要人工判断</span>
+                <span><strong>检查失败</strong> 检查过程无法执行，不等于缺失</span>
+            </div>
+            <div class="boundary-note"><strong>边界说明：</strong>本功能只检查“是否存在/是否填写”，不判断图号、名称、版次、材料、尺寸值、公差或设计正确性。尺寸疑似漏标是保守的视觉复核提示，不能替代工程师审图；没有识别到明细表也不等于确认没有下级图纸。原图和原 OCR 数据不会被修改。</div>
+
+            <dialog class="evidence-dialog" id="evidence-dialog" aria-labelledby="evidence-title">
+                <div class="dialog-shell">
+                    <header class="dialog-head">
+                        <div><div class="check-eyebrow">SOURCE EVIDENCE</div><h2 id="evidence-title">检查证据</h2><p id="evidence-subtitle">正在读取…</p></div>
+                        <button class="icon-button" id="evidence-close" type="button" aria-label="关闭证据窗口">{{ icon('close') }}</button>
+                    </header>
+                    <div class="dialog-content">
+                        <div class="evidence-image-wrap">
+                            <img id="evidence-image" alt="原图证据区域" hidden>
+                            <span class="image-note" id="evidence-image-note">正在载入原图区域…</span>
+                            <a class="small-link" id="evidence-image-link" href="#" target="_blank" rel="noopener" hidden>在新窗口打开原图区域</a>
+                        </div>
+                        <div class="evidence-meta">
+                            <dl>
+                                <dt>状态</dt><dd id="evidence-status"></dd>
+                                <dt>位置</dt><dd id="evidence-location"></dd>
+                                <dt>规则信心</dt><dd id="evidence-confidence"></dd>
+                                <dt>人工确认</dt><dd id="evidence-review"></dd>
+                                <dt>来源文件</dt><dd id="evidence-source"></dd>
+                                <dt>匹配文件</dt><dd id="evidence-target"></dd>
+                            </dl>
+                            <span class="evidence-label">检查说明</span>
+                            <p id="evidence-detail" class="result-detail"></p>
+                            <span class="evidence-label">OCR / 规则证据</span>
+                            <pre class="evidence-snippet" id="evidence-json"></pre>
+                            <a class="small-link" id="evidence-ocr-link" href="#" target="_blank" rel="noopener" hidden>打开该图纸的原始 OCR</a>
+                        </div>
+                    </div>
+                    <footer class="dialog-actions">
+                        <input class="review-note" id="review-note" type="text" maxlength="500" placeholder="人工确认备注（可选）" aria-label="人工确认备注">
+                        <button class="button button-secondary" type="button" data-review="confirmed">确认有效</button>
+                        <button class="button button-quiet danger-button" type="button" data-review="dismissed">排除误报</button>
+                        <button class="button button-quiet" type="button" data-review="unconfirmed">重置确认</button>
+                        <span id="review-feedback" class="picker-count" role="status"></span>
+                    </footer>
+                </div>
+            </dialog>
+        {% else %}
+            <section class="check-hero">
+                <div>
+                    <div class="check-eyebrow">COMPLETENESS CHECK / BATCH REVIEW</div>
+                    <h1>齐套性检查<span>，先明确范围。</span></h1>
+                    <p>只检查本次选入图纸的标题栏、明细表、图纸引用和疑似漏尺寸，不修改原图与 OCR，也不把“无法判断”伪装成通过。</p>
+                </div>
+            </section>
+            {% if error %}<div class="alert" role="alert"><strong>创建未完成</strong><span>{{ error }}</span></div>{% endif %}
+            <section class="scope-ribbon" aria-label="检查范围说明">
+                {{ icon('shield') }}
+                <span><strong>本批次范围必须手动选择。</strong>不会默认把整个图纸库算作本次提交；未选入的文件不参与图纸引用匹配。</span>
+            </section>
+            <div class="check-grid">
+                <section class="panel check-panel">
+                    <div class="check-panel-header">
+                        <div><span class="section-index">01 / NEW BATCH</span><h2>创建检查批次</h2><p>先选图纸，再指定可能的起始图。创建后仍可调整规则。</p></div>
+                        <span class="status-pill tone-neutral">{{ drawings|length }} 张可用图纸</span>
+                    </div>
+                    <form id="batch-form" action="/completeness/batches" method="post">
+                        <label class="check-field"><span>批次名称</span><input type="text" name="name" maxlength="160" placeholder="例如：2026-10-27 总装提交检查"></label>
+                        <div class="check-field">
+                            <span>选入本批次的图纸 <em class="picker-count" id="drawing-count">已选 0 张</em></span>
+                            <div class="picker-tools">
+                                <label class="search-field">{{ icon('search') }}<input class="field" id="drawing-search" type="search" placeholder="筛选图名、文件名或图号…" aria-label="筛选可选图纸"></label>
+                                <button class="button button-secondary" id="select-all-drawings" type="button">全选当前</button>
+                            </div>
+                            <div class="drawing-picker" id="drawing-picker">
+                                {% for drawing in drawings %}
+                                <div class="check-drawing" data-search="{{ (drawing.display_title ~ ' ' ~ drawing.filename ~ ' ' ~ drawing.drawing_number)|lower }}">
+                                    <input class="drawing-select" id="drawing-{{ drawing.id }}" type="checkbox" name="drawing_ids" value="{{ drawing.id }}">
+                                    <label class="drawing-choice-main" for="drawing-{{ drawing.id }}">
+                                        <strong>{{ drawing.display_title }}</strong>
+                                        <small>{{ drawing.filename }} · {{ drawing.file_type|replace('.', '')|upper }}</small>
+                                        <span class="drawing-number">{{ drawing.drawing_number or '标题栏图号未识别' }}</span>
+                                    </label>
+                                    <label class="start-toggle"><input class="start-select" type="checkbox" name="start_drawing_ids" value="{{ drawing.id }}" disabled>设为起始图</label>
+                                </div>
+                                {% else %}
+                                <div class="empty-check"><strong>还没有可检查的图纸</strong><p>请先在图纸库上传 PDF 或图片格式的图纸。</p><a class="text-link" href="/home">去上传图纸</a></div>
+                                {% endfor %}
+                            </div>
+                            <p class="rule-note">起始图用于明确总图/子装图的递归起点；不指定时，系统从本批次中没有被其他图纸引用的图纸开始。</p>
+                        </div>
+                        <details class="rules-box" open>
+                            <summary>本次检查规则 <span>默认规则可随时调整</span></summary>
+                            <div class="rules-content">
+                                <div class="rule-group">
+                                    <span class="check-section-label">标题栏必填字段</span>
+                                    <div class="rule-options">
+                                        {% for field in title_catalog %}
+                                        <label class="rule-chip"><input type="checkbox" name="required_title_fields" value="{{ field.key }}" {% if field.key in selected_title %}checked{% endif %}>{{ field.label }}</label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="rule-group">
+                                    <span class="check-section-label">明细表必填列</span>
+                                    <div class="rule-options">
+                                        {% for column in bom_catalog %}
+                                        <label class="rule-chip"><input type="checkbox" name="bom_required_columns" value="{{ column.key }}" {% if column.key in selected_bom %}checked{% endif %}>{{ column.label }}</label>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="rule-group">
+                                    <span class="check-section-label">尺寸标注</span>
+                                    <div class="rule-options"><label class="rule-chip"><input type="checkbox" name="dimension_check" {% if dimension_checked %}checked{% endif %}>启用疑似漏尺寸视觉复核</label></div>
+                                    <p class="rule-note">图像几何扫描只用于提示人工复核，不能证明整张图尺寸齐全；无法判断时标为待确认。</p>
+                                </div>
+                            </div>
+                        </details>
+                        <div class="form-actions">
+                            <button class="button button-primary" id="create-batch-btn" type="submit" {% if not drawings %}disabled{% endif %}>创建并进入批次 {{ icon('arrow') }}</button>
+                            <span class="picker-count">支持 PDF、PNG、JPEG、TIFF、BMP、WebP；不虚构 DWG/DXF 支持。</span>
+                        </div>
+                    </form>
+                </section>
+                <aside class="panel check-panel" aria-labelledby="batch-list-title">
+                    <div class="check-panel-header">
+                        <div><span class="section-index">02 / RECENT BATCHES</span><h2 id="batch-list-title">检查批次</h2><p>结果保留规则版本和每条证据来源。</p></div>
+                    </div>
+                    <div class="batch-list">
+                        {% for item in batches %}
+                        <a class="batch-card" href="/completeness/batches/{{ item.id }}">
+                            <div class="batch-card-top"><div><h3>{{ item.name }}</h3><span class="batch-meta">#{{ item.id }} · {{ item.member_count }} 张图纸 · {{ item.updated_at }}</span></div><span class="status-pill tone-{{ 'running' if item.status == 'running' else ('passed' if item.status == 'completed' else ('missing' if item.status == 'failed' else 'neutral')) }}">{{ item.status_label }}</span></div>
+                            <div class="mini-summary">
+                                <span class="mini-chip tone-neutral">共 {{ item.summary.total }}</span>
+                                <span class="mini-chip tone-passed">通过 {{ item.summary.passed }}</span>
+                                <span class="mini-chip tone-missing">缺失 {{ item.summary.missing }}</span>
+                                <span class="mini-chip tone-pending">待确认 {{ item.summary.pending }}</span>
+                                {% if item.summary.failed %}<span class="mini-chip tone-failed">失败 {{ item.summary.failed }}</span>{% endif %}
+                            </div>
+                        </a>
+                        {% else %}
+                        <div class="empty-check"><strong>还没有检查批次</strong><p>创建第一个批次，明确选入本次提交的图纸。</p></div>
+                        {% endfor %}
+                    </div>
+                </aside>
+            </div>
+        {% endif %}
+            <footer class="workspace-footer">
+                <span>检查只针对本批次已选图纸；原图与原 OCR 不被修改。<span class="footer-divider">/</span>不替代工程师审图与签核。</span>
+                <span>Powered by <a href="https://github.com/opendatalab/MinerU" target="_blank" rel="noopener" style="text-decoration:underline;text-underline-offset:2px">MinerU</a></span>
+            </footer>
+        </main>
+    </div>
+
+    <script>
+    (function () {
+        "use strict";
+        const batchForm = document.getElementById("batch-form");
+        if (batchForm) {
+            const selectBoxes = Array.from(document.querySelectorAll(".drawing-select"));
+            const count = document.getElementById("drawing-count");
+            const search = document.getElementById("drawing-search");
+            const selectAll = document.getElementById("select-all-drawings");
+            const createButton = document.getElementById("create-batch-btn");
+            function sync() {
+                let selected = 0;
+                selectBoxes.forEach(function (box) {
+                    const start = document.getElementById("start-" + box.value) || box.closest(".check-drawing").querySelector(".start-select");
+                    if (box.checked) {
+                        selected += 1;
+                        if (start) start.disabled = false;
+                    } else if (start) {
+                        start.disabled = true;
+                        start.checked = false;
+                    }
+                });
+                if (count) count.textContent = "已选 " + selected + " 张";
+                if (createButton) createButton.disabled = selected === 0 || !{{ 'true' if drawings else 'false' }};
+            }
+            selectBoxes.forEach(function (box) { box.addEventListener("change", sync); });
+            if (search) {
+                search.addEventListener("input", function () {
+                    const term = search.value.trim().toLowerCase();
+                    document.querySelectorAll(".check-drawing").forEach(function (row) {
+                        row.hidden = !!term && !(row.dataset.search || "").includes(term);
+                    });
+                });
+            }
+            if (selectAll) {
+                selectAll.addEventListener("click", function () {
+                    const visible = document.querySelectorAll(".check-drawing:not([hidden]) .drawing-select");
+                    const allChecked = Array.from(visible).every(function (box) { return box.checked; });
+                    visible.forEach(function (box) { box.checked = !allChecked; });
+                    sync();
+                });
+            }
+            batchForm.addEventListener("submit", function (event) {
+                if (!selectBoxes.some(function (box) { return box.checked; })) {
+                    event.preventDefault();
+                    window.alert("请至少选择一张图纸。本批次不会默认为整个图纸库。");
+                }
+            });
+            sync();
+        }
+
+        const rows = Array.from(document.querySelectorAll(".result-row"));
+        if (rows.length) {
+            const statusFilter = document.getElementById("result-status-filter");
+            const kindFilter = document.getElementById("result-kind-filter");
+            const reviewFilter = document.getElementById("result-review-filter");
+            const resultSearch = document.getElementById("result-search");
+            const resultCount = document.getElementById("result-count");
+            const filteredEmpty = document.getElementById("filtered-empty");
+            function filterResults() {
+                const status = statusFilter.value;
+                const kind = kindFilter.value;
+                const review = reviewFilter.value;
+                const term = (resultSearch.value || "").trim().toLowerCase();
+                let visible = 0;
+                rows.forEach(function (row) {
+                    const matches = (!status || row.dataset.status === status)
+                        && (!kind || row.dataset.kind === kind)
+                        && (!review || row.dataset.confirmed === review)
+                        && (!term || (row.dataset.search || "").includes(term));
+                    row.classList.toggle("filtered-out", !matches);
+                    if (matches) visible += 1;
+                });
+                if (resultCount) resultCount.textContent = "显示 " + visible + " / " + rows.length;
+                if (filteredEmpty) filteredEmpty.classList.toggle("filtered-out", visible !== 0);
+            }
+            [statusFilter, kindFilter, reviewFilter].forEach(function (control) {
+                if (control) control.addEventListener("change", filterResults);
+            });
+            if (resultSearch) resultSearch.addEventListener("input", filterResults);
+            filterResults();
+        }
+
+        const dialog = document.getElementById("evidence-dialog");
+        if (dialog) {
+            const image = document.getElementById("evidence-image");
+            const imageNote = document.getElementById("evidence-image-note");
+            let activeResultId = null;
+            let activeResult = null;
+            const labels = {unconfirmed: "未确认", confirmed: "已确认有效", dismissed: "已排除"};
+            function fill(id, value) {
+                const node = document.getElementById(id);
+                if (node) node.textContent = value || "—";
+            }
+            function setReviewState(status) {
+                document.querySelectorAll("[data-review]").forEach(function (button) {
+                    button.setAttribute("aria-pressed", button.dataset.review === status ? "true" : "false");
+                });
+                fill("evidence-review", labels[status] || status || "未确认");
+            }
+            function openEvidence(resultId) {
+                activeResultId = resultId;
+                activeResult = null;
+                document.getElementById("review-feedback").textContent = "";
+                document.getElementById("review-note").value = "";
+                fill("evidence-title", "检查证据");
+                fill("evidence-subtitle", "正在读取…");
+                fill("evidence-status", "");
+                fill("evidence-location", "");
+                fill("evidence-confidence", "");
+                fill("evidence-review", "");
+                fill("evidence-source", "");
+                fill("evidence-target", "");
+                fill("evidence-detail", "");
+                document.getElementById("evidence-json").textContent = "";
+                document.getElementById("evidence-ocr-link").hidden = true;
+                image.hidden = true;
+                image.removeAttribute("src");
+                const imageLink = document.getElementById("evidence-image-link");
+                if (imageLink) imageLink.hidden = true;
+                imageNote.hidden = false;
+                imageNote.textContent = "正在载入原图区域…";
+                dialog.showModal();
+                fetch("/api/completeness/results/" + resultId, {headers: {"Accept": "application/json"}})
+                    .then(function (response) {
+                        if (!response.ok) throw new Error("无法读取检查结果");
+                        return response.json();
+                    })
+                    .then(function (data) {
+                        activeResult = data;
+                        fill("evidence-title", data.title);
+                        fill("evidence-subtitle", data.status_label + " · " + (data.kind_label || "") + " · 规则 v" + data.rules_version);
+                        fill("evidence-status", data.status_label);
+                        fill("evidence-location", data.location);
+                        fill("evidence-confidence", data.confidence == null ? "未提供" : "规则信心 " + Math.round(Number(data.confidence) * 100) + "%（非模型概率）");
+                        fill("evidence-source", data.source_filename);
+                        fill("evidence-target", data.target_filename);
+                        fill("evidence-detail", data.detail);
+                        document.getElementById("evidence-json").textContent = JSON.stringify(data.evidence || {}, null, 2);
+                        setReviewState(data.confirmed_status);
+                        document.getElementById("review-note").value = data.confirmed_note || "";
+                        if (data.ocr_url) {
+                            const link = document.getElementById("evidence-ocr-link");
+                            link.href = data.ocr_url;
+                            link.hidden = false;
+                        }
+                        image.onload = function () { imageNote.hidden = true; };
+                        image.onerror = function () {
+                            image.hidden = true;
+                            imageNote.hidden = false;
+                            imageNote.textContent = "该结果没有可展示的原图区域（图纸可能已删除或页码超出范围）。";
+                        };
+                        image.src = data.image_url + "?t=" + Date.now();
+                        image.alt = data.source_filename + " 第 " + (data.page_number || 1) + " 页证据区域";
+                        image.hidden = false;
+                        if (imageLink) {
+                            imageLink.href = data.image_url;
+                            imageLink.hidden = false;
+                        }
+                    })
+                    .catch(function (error) {
+                        fill("evidence-subtitle", error.message || "证据读取失败");
+                        imageNote.textContent = "证据读取失败；可关闭后重试。";
+                    });
+            }
+            document.querySelectorAll(".evidence-open").forEach(function (button) {
+                button.addEventListener("click", function () { openEvidence(button.dataset.resultId); });
+            });
+            const close = document.getElementById("evidence-close");
+            if (close) close.addEventListener("click", function () { dialog.close(); });
+            dialog.addEventListener("click", function (event) {
+                if (event.target === dialog) dialog.close();
+            });
+            dialog.addEventListener("keydown", function (event) {
+                if (event.key === "Escape") dialog.close();
+            });
+            document.querySelectorAll("[data-review]").forEach(function (button) {
+                button.addEventListener("click", function () {
+                    if (!activeResultId) return;
+                    const status = button.dataset.review;
+                    const feedback = document.getElementById("review-feedback");
+                    feedback.textContent = "正在保存…";
+                    fetch("/api/completeness/results/" + activeResultId + "/review", {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json", "Accept": "application/json"},
+                        body: JSON.stringify({confirmed_status: status, note: document.getElementById("review-note").value || ""})
+                    }).then(function (response) {
+                        if (!response.ok) throw new Error("确认状态保存失败");
+                        return response.json();
+                    }).then(function (data) {
+                        activeResult = data;
+                        setReviewState(data.confirmed_status);
+                        feedback.textContent = "已保存";
+                        const row = document.querySelector('.result-row[data-result-id="' + activeResultId + '"]');
+                        if (row) {
+                            row.dataset.confirmed = data.confirmed_status;
+                            const badge = row.querySelector(".review-badge");
+                            if (badge) {
+                                badge.dataset.state = data.confirmed_status;
+                                badge.textContent = labels[data.confirmed_status] || "未确认";
+                            }
+                        }
+                    }).catch(function (error) {
+                        feedback.textContent = error.message || "保存失败";
+                    });
+                });
+            });
+        }
+
+        if (document.querySelector('[data-batch-status="running"]')) {
+            window.setTimeout(function () { window.location.reload(); }, 4000);
+        }
+    }());
+    </script>
+</body>
+</html>
