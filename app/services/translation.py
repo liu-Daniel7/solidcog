@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 import time
 from concurrent.futures import ThreadPoolExecutor
 
@@ -22,12 +23,20 @@ LOGGER = logging.getLogger(__name__)
 PROVIDER = "qwen-mt"
 TARGET_LANGUAGES = {"en": "English"}
 SECTIONS = ("title", "tech", "extra")
+MAX_TRANSLATION_CHARS = 3000
 DOMAIN_PROMPT = (
     "Mechanical engineering drawing and manufacturing notes. "
     "Use concise, standard shop-floor English. Preserve every placeholder "
     "starting with SCGPH exactly. Do not convert units, substitute standards, "
     "add explanations, or change numbers. Keep the original meaning and order."
 )
+def _csv_safe(value) -> str:
+    text = str(value if value is not None else "")
+    if text.startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + text
+    return text
+
+
 STATUS_LABELS = {
     "translated": "已翻译",
     "cached": "缓存",
@@ -61,6 +70,39 @@ def _error_message(exc: Exception) -> str:
     return message[:500]
 
 
+def _chunk_text(text: str, limit: int = MAX_TRANSLATION_CHARS) -> list[str]:
+    """Split long OCR blocks without cutting a protected placeholder."""
+    if len(text) <= limit:
+        return [text]
+    parts = re.split(r"(?<=[。！？；;.!?])\s*|\n+", text)
+    chunks: list[str] = []
+    current = ""
+    for raw_part in parts:
+        part = raw_part.strip()
+        if not part:
+            continue
+        while len(part) > limit:
+            cut = limit
+            for marker in re.finditer(r"SCGPH\d{4}", part):
+                if marker.start() < cut < marker.end():
+                    cut = marker.start()
+                    break
+            if cut <= 0:
+                cut = limit
+            chunks.append(part[:cut].strip())
+            part = part[cut:].strip()
+        if not part:
+            continue
+        if current and len(current) + len(part) + 1 > limit:
+            chunks.append(current)
+            current = part
+        else:
+            current = f"{current} {part}".strip()
+    if current:
+        chunks.append(current)
+    return chunks or [text]
+
+
 def _translate_one(segment: dict, target_lang: str, glossary: list[dict]) -> dict:
     source = str(segment["source_text"])
     if not segment.get("translatable"):
@@ -75,35 +117,47 @@ def _translate_one(segment: dict, target_lang: str, glossary: list[dict]) -> dic
     masked, mapping = protect(source)
     terms = _terms_for(source, glossary)
     try:
-        result = None
-        for attempt in range(2):
-            try:
-                result = qwen_mt.translate_text(
-                    masked,
-                    target_lang=target_lang,
-                    source_lang=_source_lang(source),
-                    terms=terms,
-                    domains=DOMAIN_PROMPT,
-                )
-                break
-            except Exception as exc:
-                status = getattr(exc, "status_code", None)
-                if attempt == 0 and status in {429, 500, 502, 503, 504}:
-                    time.sleep(0.8)
-                    continue
-                raise
-        if result is None:
-            raise RuntimeError("Qwen-MT 没有返回结果")
-        restored, missing = restore(result["text"], mapping)
+        translated_parts = []
+        input_tokens = 0
+        output_tokens = 0
+        for chunk in _chunk_text(masked):
+            result = None
+            for attempt in range(2):
+                try:
+                    result = qwen_mt.translate_text(
+                        chunk,
+                        target_lang=target_lang,
+                        source_lang=_source_lang(source),
+                        terms=terms,
+                        domains=DOMAIN_PROMPT,
+                    )
+                    break
+                except Exception as exc:
+                    status = getattr(exc, "status_code", None)
+                    if attempt == 0 and status in {429, 500, 502, 503, 504}:
+                        time.sleep(0.8)
+                        continue
+                    raise
+            if result is None:
+                raise RuntimeError("Qwen-MT 没有返回结果")
+            translated_parts.append(result["text"])
+            input_tokens += int(result.get("input_tokens") or 0)
+            output_tokens += int(result.get("output_tokens") or 0)
+        restored, missing = restore("\n".join(translated_parts), mapping)
         issues = validate(source, restored)
         if missing:
             issues.insert(0, "译文丢失工程数据占位符：" + "、".join(missing))
+        if re.search(r"[\u3400-\u9fff]", source):
+            if restored.strip() == source.strip():
+                issues.append("译文与原文相同，可能未翻译")
+            elif not re.search(r"[A-Za-z]", restored):
+                issues.append("译文未包含目标语言文本")
         return {
             "translated_text": restored,
             "status": "needs_review" if issues else "translated",
             "error": "；".join(issues) if issues else None,
-            "input_tokens": result.get("input_tokens", 0),
-            "output_tokens": result.get("output_tokens", 0),
+            "input_tokens": input_tokens,
+            "output_tokens": output_tokens,
         }
     except Exception as exc:
         LOGGER.warning("Qwen-MT translation failed for segment %s: %s", segment.get("id"), _error_message(exc))
@@ -154,6 +208,8 @@ def translate_drawing(
         if cached["source_hash"] != segment["source_hash"]:
             return None
         if cached["glossary_hash"] != glossary_hash:
+            return None
+        if cached.get("model") != config.QWEN_MT_MODEL:
             return None
         if cached["status"] not in {"translated", "skipped", "needs_review"}:
             return None
@@ -225,6 +281,8 @@ def get_translation_payload(drawing_id: int, target_lang: str = "en", new_ids: s
             has_translation = False
         if has_translation and row.get("glossary_hash") != glossary_hash:
             has_translation = False
+        if has_translation and row.get("model") != config.QWEN_MT_MODEL:
+            has_translation = False
         if not has_translation:
             status = "missing"
             translated = ""
@@ -275,8 +333,8 @@ def export_csv(drawing_id: int, target_lang: str = "en") -> tuple[str, str]:
             index,
             segment["section_label"],
             segment["label"],
-            segment["source_text"],
-            segment["translated_text"],
+            _csv_safe(segment["source_text"]),
+            _csv_safe(segment["translated_text"]),
             STATUS_LABELS.get(segment["status"], segment["status"]),
         ])
     filename = f"{payload['filename']}.zh-{target_lang}.csv"

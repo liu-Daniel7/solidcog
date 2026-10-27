@@ -15,7 +15,7 @@ class TranslateRequest(BaseModel):
     sections: list[str] | None = None
 
 
-@router.get("/drawings/{drawing_id}/translations")
+@router.get("/drawings/{drawing_id}/translations", dependencies=[Depends(verify_local_request)])
 def get_translations(drawing_id: int, target_lang: str = "en"):
     return translation.get_translation_payload(drawing_id, target_lang)
 
@@ -30,7 +30,7 @@ def create_translations(drawing_id: int, request: TranslateRequest):
     )
 
 
-@router.get("/drawings/{drawing_id}/translations.csv")
+@router.get("/drawings/{drawing_id}/translations.csv", dependencies=[Depends(verify_local_request)])
 def download_translations(drawing_id: int, target_lang: str = "en"):
     content, filename = translation.export_csv(drawing_id, target_lang)
     encoded = quote(filename, safe="")

@@ -42,6 +42,57 @@ class TranslationServiceTests(unittest.TestCase):
             item.stop()
         self.temp_dir.cleanup()
 
+    def test_long_text_is_split_before_qwen_mt(self):
+        long_text = "去毛刺。" * 900
+        chunks = translation._chunk_text(long_text)
+        self.assertGreater(len(chunks), 1)
+        self.assertTrue(all(len(chunk) <= translation.MAX_TRANSLATION_CHARS for chunk in chunks))
+        self.assertEqual("".join(chunks).replace(" ", "")[:20], long_text[:20])
+
+    def test_model_change_invalidates_cached_rows(self):
+        with patch.object(translation.qwen_mt, "translate_text", return_value={"text": "Panel 8", "input_tokens": 1, "output_tokens": 1}):
+            translation.translate_drawing(self.drawing_id)
+        with patch.object(config, "QWEN_MT_MODEL", "qwen-mt-flash"):
+            payload = translation.get_translation_payload(self.drawing_id)
+        self.assertGreater(payload["summary"]["missing"], 0)
+
+    def test_source_change_refreshes_segments_and_invalidates_translation(self):
+        with patch.object(translation.qwen_mt, "translate_text", return_value={"text": "Panel 8", "input_tokens": 1, "output_tokens": 1}):
+            translation.translate_drawing(self.drawing_id)
+        with database.connect() as connection:
+            connection.execute(
+                "UPDATE drawings SET title_text=? WHERE id=?",
+                ("图名 | 新面板", self.drawing_id),
+            )
+            connection.commit()
+        refreshed = ensure_segments(self.drawing_id)
+        self.assertTrue(any("新面板" in segment["source_text"] for segment in refreshed))
+        payload = translation.get_translation_payload(self.drawing_id)
+        self.assertGreater(payload["summary"]["missing"], 0)
+
+    def test_long_segment_is_split_into_multiple_mt_requests(self):
+        drawing_id = drawings_repository.create({
+            "filename": "long.pdf",
+            "file_type": ".pdf",
+            "file_size": 1,
+            "upload_time": "2026-10-27 10:00:00",
+            "title_text": "",
+            "tech_text": "1. " + ("去毛刺。" * 900),
+            "all_text": "",
+            "layout": "horizontal",
+        })
+        ensure_segments(drawing_id)
+        calls = []
+
+        def fake_translate(text, **kwargs):
+            calls.append(text)
+            return {"text": "Deburr.", "input_tokens": 10, "output_tokens": 3}
+
+        with patch.object(translation.qwen_mt, "translate_text", side_effect=fake_translate):
+            payload = translation.translate_drawing(drawing_id)
+        self.assertGreater(len(calls), 1)
+        self.assertEqual(payload["summary"]["failed"], 0)
+
     def test_translation_is_stored_and_reused_from_cache(self):
         calls = []
 
@@ -103,6 +154,21 @@ class TranslationServiceTests(unittest.TestCase):
         with patch.object(translation.qwen_mt, "translate_text", return_value={"text": "EN", "input_tokens": 1, "output_tokens": 1}):
             payload = translation.translate_drawing(self.drawing_id)
         self.assertGreater(payload["summary"]["needs_review"], 0)
+
+    def test_csv_neutralizes_formula_like_text(self):
+        drawing_id = drawings_repository.create({
+            "filename": "formula.pdf",
+            "file_type": ".pdf",
+            "file_size": 1,
+            "upload_time": "2026-10-27 10:00:00",
+            "title_text": "图名 | =HYPERLINK(\"https://evil.example\")",
+            "tech_text": "",
+            "all_text": "",
+            "layout": "horizontal",
+        })
+        ensure_segments(drawing_id)
+        content, _ = translation.export_csv(drawing_id)
+        self.assertIn("'=HYPERLINK", content)
 
     def test_csv_has_bom_and_bilingual_columns(self):
         with patch.object(translation.qwen_mt, "translate_text", return_value={"text": "Deburr", "input_tokens": 1, "output_tokens": 1}):

@@ -22,6 +22,29 @@ A | CFC | 初版 |"""
         self.assertFalse(next(item for item in segments if item["label"] == "图号")["translatable"])
         self.assertFalse(next(item for item in segments if item["label"] == "页码")["translatable"])
 
+    def test_qwen_plain_and_colon_title_rows_are_parsed(self):
+        for title in ("图名：面板8\n图号：LJT01.01", "图名 面板8\n图号 LJT01.01", "设计 | 张三\n图名 | 面板8"):
+            with self.subTest(title=title):
+                segments = build_segments(title_text=title)
+                labels = {segment["label"]: segment["source_text"] for segment in segments}
+                self.assertTrue(any(label in labels for label in ("图名", "设计")))
+        segments = build_segments("设计 | 张三\n图名 | 面板8")
+        labels = {segment["label"]: segment["source_text"] for segment in segments}
+        self.assertEqual(labels["设计"], "张三")
+
+    def test_all_text_only_fallback_recovers_title_and_requirements(self):
+        all_text = "技术要求\n1. 去毛刺\n2. 热处理\n图名 | 面板8\n折弯图"
+        segments = build_segments("", "", all_text)
+        self.assertEqual(
+            [(segment["section"], segment["label"], segment["source_text"]) for segment in segments],
+            [
+                ("title", "图名", "面板8"),
+                ("tech", "第 1 条", "去毛刺"),
+                ("tech", "第 2 条", "热处理"),
+                ("extra", "全文补充", "折弯图"),
+            ],
+        )
+
     def test_technical_notes_keep_numbering_and_merge_continuations(self):
         tech = """技术要求：
 1. 去毛刺、去毛边。

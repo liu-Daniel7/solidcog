@@ -96,11 +96,7 @@ def init_database() -> None:
 
 
 def _seed_glossary(connection: sqlite3.Connection) -> None:
-    count = connection.execute(
-        "SELECT COUNT(*) FROM glossary_terms WHERE source_lang='zh' AND target_lang='en'"
-    ).fetchone()[0]
-    if count:
-        return
+    # Keep adding newly shipped terms without deleting customer overrides.
     path = BASE_DIR / "data" / "glossary" / "mechanical_zh_en.csv"
     if not path.exists():
         return

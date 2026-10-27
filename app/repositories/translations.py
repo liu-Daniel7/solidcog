@@ -58,6 +58,46 @@ def list_segments(drawing_id: int) -> list[dict]:
     return [dict(row) for row in rows]
 
 
+def update_segment(segment_id: int, label: str, source_text: str, source_hash: str, translatable: bool, ordinal: int) -> None:
+    with closing(connect()) as connection:
+        with connection:
+            connection.execute(
+                """
+                UPDATE drawing_segments
+                SET label=?, source_text=?, source_hash=?, translatable=?, ordinal=?
+                WHERE id=?
+                """,
+                (label, source_text, source_hash, 1 if translatable else 0, ordinal, segment_id),
+            )
+
+
+def delete_segment(segment_id: int) -> None:
+    with closing(connect()) as connection:
+        with connection:
+            connection.execute("DELETE FROM translations WHERE segment_id=?", (segment_id,))
+            connection.execute("DELETE FROM drawing_segments WHERE id=?", (segment_id,))
+
+
+def delete_translation_for_segment(segment_id: int) -> None:
+    with closing(connect()) as connection:
+        with connection:
+            connection.execute("DELETE FROM translations WHERE segment_id=?", (segment_id,))
+
+
+def delete_missing_segments(drawing_id: int, keep_keys: set[str]) -> None:
+    with closing(connect()) as connection:
+        with connection:
+            rows = connection.execute(
+                "SELECT id, segment_key FROM drawing_segments WHERE drawing_id=?",
+                (drawing_id,),
+            ).fetchall()
+            stale_ids = [row["id"] for row in rows if row["segment_key"] not in keep_keys]
+            if stale_ids:
+                placeholders = ",".join("?" for _ in stale_ids)
+                connection.execute(f"DELETE FROM translations WHERE segment_id IN ({placeholders})", stale_ids)
+                connection.execute(f"DELETE FROM drawing_segments WHERE id IN ({placeholders})", stale_ids)
+
+
 def list_rows(drawing_id: int, target_lang: str, provider: str = "qwen-mt") -> list[dict]:
     with closing(connect()) as connection:
         rows = connection.execute(

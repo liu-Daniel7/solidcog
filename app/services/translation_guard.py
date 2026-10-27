@@ -9,16 +9,21 @@ from __future__ import annotations
 
 import re
 
+_UNIT_ALTS = r"mm|cm|m|in|inch|inches|kg|g|mg|t|MPa|kPa|Pa|N|kN|rpm|min|s|h|L|mL|ml|°C|℃|lb|lbs|psi"
+
 _TOKEN_PATTERNS = [
     re.compile(r"(?:⌀|Φ|φ|Ø)\s*\d+(?:\.\d+)?"),
-    re.compile(r"±\s*\d+(?:\.\d+)?\s*(?:mm|cm|m|in|°|%|HRC|HB|HV|Ra|μm|um)?"),
+    re.compile(r"±\s*\d+(?:\.\d+)?\s*(?:" + _UNIT_ALTS + r")?"),
     re.compile(r"(?<![A-Za-z0-9])(?:Ra|Rz)\s*\d+(?:\.\d+)?(?![A-Za-z0-9])", re.I),
-    re.compile(r"(?<![A-Za-z0-9])(?:HRC|HB|HV)\s*\d+(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![A-Za-z0-9])(?:HRC|HRA|HRB|HBW|HBS|HB|HV)\s*\d+(?:\.\d+)?(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*(?:HRC|HRA|HRB|HBW|HBS|HB|HV)(?![A-Za-z0-9])", re.I),
     re.compile(r"(?<![A-Za-z0-9])(?:M|G|R|SR|C)\s*\d+(?:\.\d+)?(?:\s*[x×]\s*\d+(?:\.\d+)?)?(?![A-Za-z0-9])"),
-    re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*[～~\-—–]\s*\d+(?:\.\d+)?\s*(?:HBW|HRC|HB|HV|mm|cm|m|in|°|%|μm|um)(?![A-Za-z0-9])", re.I),
-    re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*(?:mm|cm|m|in|°|%|HRC|HB|HV|μm|um)(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*[～~\-—–]\s*\d+(?:\.\d+)?\s*(?:" + _UNIT_ALTS + r"|HRC|HRA|HRB|HBW|HBS|HB|HV)(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*(?:" + _UNIT_ALTS + r"|HRC|HRA|HRB|HBW|HBS|HB|HV)(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*[+-]\s*\d+(?:\.\d+)?(?:\s*(?:" + _UNIT_ALTS + r"))?(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![\d.])[+-]\s*\d+(?:\.\d+)?(?![.\d])"),
     re.compile(r"(?<![A-Za-z0-9])(?:GB|JB|ISO|DIN|ASTM|ANSI|JIS|EN)\s*(?:/\s*T)?\s*[A-Z0-9][A-Z0-9.\-—–]*(?![A-Za-z0-9])", re.I),
-    re.compile(r"(?<![A-Za-z0-9])(?:Q\d+[A-Z]?|40Cr|20CrMnTi|45#|06Cr19Ni10|304|316L|6061|7075|HT200|QT\d+-\d+)(?![A-Za-z0-9])", re.I),
+    re.compile(r"(?<![A-Za-z0-9])(?:Q\d+[A-Z]?|\d{2,3}(?:Cr|Mn|Ni|Mo|Si|Ti|V|W|B|Al|Cu)[A-Za-z0-9]*|40Cr|20CrMnTi|45#|06Cr19Ni10|304|316L|6061|7075|HT200|QT\d+-\d+)(?![A-Za-z0-9])", re.I),
     re.compile(r"(?<![A-Za-z0-9])[A-Z]{1,8}(?:-[A-Z0-9]{1,12}){2,}(?![A-Za-z0-9])"),
     re.compile(r"(?<![A-Za-z0-9])[A-Z]{2,8}\d{2,}(?:[.-]\d+)*(?![A-Za-z0-9])"),
     re.compile(r"(?<![\d.])\d+(?:\.\d+)?\s*[×x]\s*\d+(?:\.\d+)?(?![\d.])"),
@@ -27,7 +32,7 @@ _TOKEN_PATTERNS = [
 ]
 
 _PLACEHOLDER = "SCGPH{:04d}"
-_UNIT = re.compile(r"\b(?:mm|cm|inch|inches)\b|(?<=\d)\s*in\b", re.I)
+_UNIT = re.compile(r"(?<![A-Za-z])(?:" + _UNIT_ALTS + r")(?![A-Za-z])|(?<=\d)\s*in\b", re.I)
 
 
 def _spans(text: str) -> list[tuple[int, int]]:
@@ -89,8 +94,12 @@ def validate(source: str, translated: str) -> list[str]:
             issues.append(f"工程数据未原样保留：{token}")
     source_units = set(match.group(0).strip().lower() for match in _UNIT.finditer(source or ""))
     target_units = set(match.group(0).strip().lower() for match in _UNIT.finditer(translated or ""))
-    if "mm" in source_units and "in" in target_units and "in" not in source_units:
+    if "mm" in source_units and target_units.intersection({"in", "inch", "inches"}):
         issues.append("译文疑似把毫米换算成了英寸")
+    if "kg" in source_units and target_units.intersection({"lb", "lbs"}):
+        issues.append("译文疑似把千克换算成了磅")
+    if "MPa" in source_units and "psi" in target_units:
+        issues.append("译文疑似把兆帕换算成了 psi")
     source_standards = set(re.findall(r"(?<![A-Za-z0-9])(?:GB|JB|ISO|DIN|ASTM|ANSI|JIS|EN)(?![A-Za-z0-9])", source or "", flags=re.I))
     target_standards = set(re.findall(r"(?<![A-Za-z0-9])(?:GB|JB|ISO|DIN|ASTM|ANSI|JIS|EN)(?![A-Za-z0-9])", translated or "", flags=re.I))
     if source_standards and any(item.upper() not in {value.upper() for value in source_standards} for item in target_standards):

@@ -9,6 +9,7 @@ from app import config, database
 from app.application import create_app
 from app.repositories import drawings
 from app.repositories import translations as translation_rows
+from app.services import translation
 
 
 class TranslationRouteTests(unittest.TestCase):
@@ -72,15 +73,30 @@ class TranslationRouteTests(unittest.TestCase):
         self.assertEqual(blocked.status_code, 403)
         translate.assert_called_once()
 
+    def test_read_routes_reject_untrusted_origin(self):
+        for path in (
+            f"/drawings/{self.drawing_id}/translations?target_lang=en",
+            f"/drawings/{self.drawing_id}/translations.csv?target_lang=en",
+        ):
+            with self.subTest(path=path):
+                response = self.client.get(path, headers={"origin": "https://evil.example"})
+                self.assertEqual(response.status_code, 403)
+
     def test_delete_cleans_segments_and_translations(self):
-        self.client.get(f"/drawings/{self.drawing_id}/translations?target_lang=en")
+        with patch(
+            "app.services.translation.qwen_mt.translate_text",
+            return_value={"text": "Deburr", "input_tokens": 1, "output_tokens": 1},
+        ):
+            translation.translate_drawing(self.drawing_id)
         self.assertGreater(len(translation_rows.list_segments(self.drawing_id)), 0)
+        self.assertTrue(any(row["translation_status"] for row in translation_rows.list_rows(self.drawing_id, "en")))
         response = self.client.delete(
             f"/drawings/{self.drawing_id}",
             headers={"origin": "http://127.0.0.1:8000"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(translation_rows.list_segments(self.drawing_id), [])
+        self.assertEqual(translation_rows.list_rows(self.drawing_id, "en"), [])
 
     def test_csv_route_returns_bom_and_download_name(self):
         with patch(

@@ -28,6 +28,22 @@ class TranslationGuardTests(unittest.TestCase):
         self.assertTrue(any("毫米" in issue for issue in issues))
         self.assertTrue(any("标准" in issue for issue in issues))
 
+    def test_extended_material_hardness_mass_and_tolerance_tokens(self):
+        cases = {
+            "硬度250HBW": "250HBW",
+            "材料35CrMo": "35CrMo",
+            "质量0.18kg": "0.18kg",
+            "孔径φ25 +0.021": "φ25 +0.021",
+        }
+        for source, token in cases.items():
+            with self.subTest(source=source):
+                self.assertIn(token, protected_tokens(source))
+
+    def test_hardness_and_mass_substitution_are_flagged(self):
+        self.assertTrue(any("工程数据" in issue for issue in validate("硬度250HBW", "Hardness 300 HBW")))
+        self.assertTrue(any("工程数据" in issue for issue in validate("质量0.18kg", "Mass 0.4 lb")))
+        self.assertTrue(any("千克" in issue for issue in validate("质量0.18kg", "Mass 0.18 kg to 0.4 lb")))
+
     def test_tokens_adjacent_to_chinese_are_found(self):
         tokens = protected_tokens("材料06Cr19Ni10，比例1:5，图幅A3，内角R1.0")
         self.assertIn("06Cr19Ni10", tokens)

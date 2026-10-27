@@ -77,7 +77,7 @@ FIELD_ALIASES = {
 _ALIASES = sorted(FIELD_ALIASES.items(), key=lambda item: len(item[0]), reverse=True)
 _HEADER_TOKENS = {
     "标记", "处数", "分区", "更改文件号", "签名", "年月日", "标准化",
-    "阶段标记", "工艺", "共张第张", "共页第页", "张", "第张",
+    "阶段标记", "工艺", "共张第张", "共页第页",
 }
 _CJK = re.compile(r"[\u3400-\u9fff]")
 _COPYRIGHT = re.compile(r"版权|著作权|COPYRIGHT|PROPERTY", re.I)
@@ -147,6 +147,19 @@ def _append_unique(rows: list[dict], label: str, text: str, seen: set[tuple[str,
     rows.append({"label": label, "source_text": text})
 
 
+def _split_title_line(line: str) -> list[str]:
+    if "|" in line:
+        return [cell.strip() for cell in line.split("|") if cell.strip()]
+    colon = re.match(r"^([^：:]{1,30})[：:]\s*(.+)$", line)
+    if colon:
+        return [colon.group(1).strip(), colon.group(2).strip()]
+    for alias, _ in _ALIASES:
+        match = re.match(rf"^{re.escape(alias)}\s*(?:[：:]\s*)?(.+)$", line, re.I)
+        if match:
+            return [alias, match.group(1).strip()]
+    return [line]
+
+
 def _title_rows(text: str) -> list[dict]:
     rows: list[dict] = []
     seen: set[tuple[str, str]] = set()
@@ -157,7 +170,7 @@ def _title_rows(text: str) -> list[dict]:
                 continue
             if _COPYRIGHT.search(line):
                 continue
-            cells = [cell.strip() for cell in line.split("|") if cell.strip()]
+            cells = _split_title_line(line)
             if not cells:
                 continue
             labels = [_field_label(cell) for cell in cells]
@@ -245,7 +258,7 @@ def _tech_rows(text: str) -> list[dict]:
 
 
 def _looks_like_title_line(line: str) -> bool:
-    cells = [cell.strip() for cell in line.split("|") if cell.strip()]
+    cells = _split_title_line(line.strip())
     if len(cells) < 2:
         return False
     return any(_field_label(cell) for cell in cells)
@@ -293,6 +306,29 @@ def _extra_rows(text: str, title_text: str, tech_text: str, tech_rows: list[dict
     return rows
 
 
+def _fallback_title(text: str) -> str:
+    selected = []
+    for line in (text or "").splitlines():
+        cells = _split_title_line(line.strip())
+        if any(_field_label(cell) or _is_header_cell(cell) for cell in cells):
+            selected.append(line)
+        elif re.search(r"(?:公司|集团|厂|大学|学院|COMPANY|GROUP)\s*$", _compact(line), re.I):
+            selected.append(line)
+    return "\n".join(selected)
+
+
+def _fallback_tech(text: str) -> str:
+    match = re.search(r"(?:技术要求|技术条件|工艺要求|技术说明)\s*[:：]?", text or "")
+    if not match:
+        return ""
+    body = []
+    for line in text[match.end():].splitlines():
+        if _looks_like_title_line(line) or re.match(r"^\s*(?:标记|设计|制图|审核|工艺)\b", line):
+            break
+        body.append(line)
+    return "\n".join(body).strip()
+
+
 def _is_translatable(label: str, text: str) -> bool:
     if label in {"图号", "页码"}:
         return False
@@ -301,11 +337,14 @@ def _is_translatable(label: str, text: str) -> bool:
 
 def build_segments(title_text: str = "", tech_text: str = "", all_text: str = "") -> list[dict]:
     """Build deterministic rows from the three OCR text fields."""
-    tech_rows = _tech_rows(tech_text or "")
+    all_text = all_text or ""
+    title_source = title_text or _fallback_title(all_text)
+    tech_source = tech_text or _fallback_tech(all_text)
+    tech_rows = _tech_rows(tech_source)
     sections = [
-        ("title", _title_rows(title_text or "")),
+        ("title", _title_rows(title_source)),
         ("tech", tech_rows),
-        ("extra", _extra_rows(all_text or "", title_text or "", tech_text or "", tech_rows)),
+        ("extra", _extra_rows(all_text, title_source, tech_source, tech_rows)),
     ]
     segments: list[dict] = []
     ordinal = 0
@@ -329,9 +368,6 @@ def build_segments(title_text: str = "", tech_text: str = "", all_text: str = ""
 
 
 def ensure_segments(drawing_id: int) -> list[dict]:
-    existing = repository.list_segments(drawing_id)
-    if existing:
-        return existing
     drawing = drawings_repository.get(drawing_id)
     if not drawing:
         raise HTTPException(404, "未找到图纸")
@@ -340,5 +376,35 @@ def ensure_segments(drawing_id: int) -> list[dict]:
         str(drawing.get("tech_text") or ""),
         str(drawing.get("all_text") or ""),
     )
-    repository.create_segments(drawing_id, built)
+    existing = repository.list_segments(drawing_id)
+    if not existing:
+        repository.create_segments(drawing_id, built)
+        return repository.list_segments(drawing_id)
+
+    existing_by_key = {row["segment_key"]: row for row in existing}
+    built_keys = {segment["segment_key"] for segment in built}
+    new_segments = []
+    for segment in built:
+        old = existing_by_key.get(segment["segment_key"])
+        if old is None:
+            new_segments.append(segment)
+            continue
+        source_changed = old["source_hash"] != segment["source_hash"]
+        translatable_changed = bool(old["translatable"]) != bool(segment["translatable"])
+        if source_changed or translatable_changed:
+            repository.delete_translation_for_segment(old["id"])
+        if (
+            old["label"] != segment["label"]
+            or old["source_text"] != segment["source_text"]
+            or old["source_hash"] != segment["source_hash"]
+            or old["translatable"] != (1 if segment["translatable"] else 0)
+            or old["ordinal"] != segment["ordinal"]
+        ):
+            repository.update_segment(
+                old["id"], segment["label"], segment["source_text"], segment["source_hash"],
+                segment["translatable"], segment["ordinal"],
+            )
+    if new_segments:
+        repository.create_segments(drawing_id, new_segments)
+    repository.delete_missing_segments(drawing_id, built_keys)
     return repository.list_segments(drawing_id)
