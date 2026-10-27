@@ -66,7 +66,10 @@ def translate_text(
         extra_body={"translation_options": options},
         timeout=config.QWEN_MT_TIMEOUT_SECONDS,
     )
-    translated = (completion.choices[0].message.content or "").strip()
+    choice = completion.choices[0]
+    if getattr(choice, "finish_reason", None) == "length":
+        raise RuntimeError("Qwen-MT 输出达到长度限制，译文可能不完整")
+    translated = (choice.message.content or "").strip()
     if not translated:
         raise RuntimeError("Qwen-MT 返回空结果")
     usage = getattr(completion, "usage", None)

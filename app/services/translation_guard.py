@@ -91,8 +91,8 @@ def validate(source: str, translated: str) -> list[str]:
     target_units = set(match.group(0).strip().lower() for match in _UNIT.finditer(translated or ""))
     if "mm" in source_units and "in" in target_units and "in" not in source_units:
         issues.append("译文疑似把毫米换算成了英寸")
-    source_standards = set(re.findall(r"\b(?:GB|JB|ISO|DIN|ASTM|ANSI|JIS|EN)\b", source or "", flags=re.I))
-    target_standards = set(re.findall(r"\b(?:GB|JB|ISO|DIN|ASTM|ANSI|JIS|EN)\b", translated or "", flags=re.I))
+    source_standards = set(re.findall(r"(?<![A-Za-z0-9])(?:GB|JB|ISO|DIN|ASTM|ANSI|JIS|EN)(?![A-Za-z0-9])", source or "", flags=re.I))
+    target_standards = set(re.findall(r"(?<![A-Za-z0-9])(?:GB|JB|ISO|DIN|ASTM|ANSI|JIS|EN)(?![A-Za-z0-9])", translated or "", flags=re.I))
     if source_standards and any(item.upper() not in {value.upper() for value in source_standards} for item in target_standards):
         issues.append("译文疑似替换了标准体系")
     return issues

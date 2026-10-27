@@ -7,6 +7,7 @@ import hashlib
 import io
 import json
 import logging
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 from fastapi import HTTPException
@@ -74,13 +75,25 @@ def _translate_one(segment: dict, target_lang: str, glossary: list[dict]) -> dic
     masked, mapping = protect(source)
     terms = _terms_for(source, glossary)
     try:
-        result = qwen_mt.translate_text(
-            masked,
-            target_lang=target_lang,
-            source_lang=_source_lang(source),
-            terms=terms,
-            domains=DOMAIN_PROMPT,
-        )
+        result = None
+        for attempt in range(2):
+            try:
+                result = qwen_mt.translate_text(
+                    masked,
+                    target_lang=target_lang,
+                    source_lang=_source_lang(source),
+                    terms=terms,
+                    domains=DOMAIN_PROMPT,
+                )
+                break
+            except Exception as exc:
+                status = getattr(exc, "status_code", None)
+                if attempt == 0 and status in {429, 500, 502, 503, 504}:
+                    time.sleep(0.8)
+                    continue
+                raise
+        if result is None:
+            raise RuntimeError("Qwen-MT 没有返回结果")
         restored, missing = restore(result["text"], mapping)
         issues = validate(source, restored)
         if missing:
