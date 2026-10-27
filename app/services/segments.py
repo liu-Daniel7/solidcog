@@ -465,6 +465,15 @@ def build_segments(title_text: str = "", tech_text: str = "", all_text: str = ""
     return segments
 
 
+def extract_title(title_text: str = "", all_text: str = "") -> str:
+    """Extract only the title-block part name for the drawing list."""
+    title_source = title_text or _fallback_title(all_text)
+    for row in _title_rows(title_source):
+        if row["label"] in {"图名", "零件名称"}:
+            return str(row["source_text"]).strip()
+    return ""
+
+
 def ensure_segments(drawing_id: int) -> list[dict]:
     drawing = drawings_repository.get(drawing_id)
     if not drawing:

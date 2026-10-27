@@ -144,11 +144,12 @@
                         <div class="table-wrap">
                             <table>
                                 <caption class="visually-hidden">图纸文件及识别结果</caption>
-                                <thead><tr><th scope="col">图纸名称</th><th scope="col">上传时间 / 大小</th><th scope="col">操作</th></tr></thead>
+                                <thead><tr><th scope="col">图纸名称</th><th scope="col">文件名</th><th scope="col">上传时间 / 大小</th><th scope="col">操作</th></tr></thead>
                                 <tbody>
                                 {% for d in rows %}
                                     <tr>
-                                        <td><div class="file-cell"><span class="file-symbol">{{ icon('file') }}</span><div class="file-info"><a class="file-name" href="/uploads/{{ d[1]|urlencode }}" target="_blank" rel="noopener" draggable="true" data-id="{{ d[5] }}" data-filename="{{ d[1] }}" title="{{ d[1] }}">{{ d[1] }}</a><span class="file-meta">{{ d[2]|replace('.', '')|upper }}<span class="meta-divider">/</span>已识别</span></div></div></td>
+                                        <td><div class="drawing-title-cell" data-preview-url="/drawings/{{ d[5] }}/preview" data-preview-alt="{{ d[6] or d[1] }}" tabindex="0" title="指向查看图纸预览"><span class="drawing-title">{{ d[6] or "未识别" }}</span><span class="file-meta">标题栏图名</span></div></td>
+                                        <td><div class="file-cell" data-preview-url="/drawings/{{ d[5] }}/preview" data-preview-alt="{{ d[6] or d[1] }}" tabindex="0" title="指向查看图纸预览"><span class="file-symbol">{{ icon('file') }}</span><div class="file-info"><a class="file-name" href="/uploads/{{ d[1]|urlencode }}" target="_blank" rel="noopener" draggable="true" data-id="{{ d[5] }}" data-filename="{{ d[1] }}" title="{{ d[1] }}">{{ d[1] }}</a><span class="file-meta">{{ d[2]|replace('.', '')|upper }}<span class="meta-divider">/</span>已识别</span></div></div></td>
                                         <td class="file-details"><time>{{ d[4][:16] }}</time><span>{{ "%.2f"|format(d[3] / 1024 / 1024) }} MB</span></td>
                                         <td><div class="action-group"><button class="text-link review-drawing" type="button" data-id="{{ d[5] }}" data-filename="{{ d[1] }}">审图 {{ icon('arrow') }}</button><details class="file-menu"><summary class="icon-button" aria-label="{{ d[1] }} 的更多操作">···</summary><div class="file-menu-items"><a href="/view-ocr/{{ d[5] }}">查看识别结果</a><a href="/translate/{{ d[5] }}">翻译对照</a><a href="/export-ocr/{{ d[5] }}">导出 OCR 文本</a><a class="delete-link" href="/delete-drawing/{{ d[5] }}" onclick="return confirmDelete(event, this.href)">删除图纸</a></div></details></div></td>
                                     </tr>
@@ -206,6 +207,9 @@
         <div class="modal-card"><div class="modal-header"><div><span class="section-index">DRAWING CONTEXT</span><h3 id="drawing-modal-title">选择一张图纸</h3></div><button id="close-drawing-modal" class="icon-button" type="button" aria-label="关闭">{{ icon('close') }}</button></div><p class="modal-description">将图纸与识别文字添加到当前对话。</p><div id="drawing-list" class="drawing-list"><div class="empty-state">加载中…</div></div></div>
     </div>
     <div id="notification" class="notification" role="alert" hidden></div>
+    <div id="drawing-preview" class="drawing-preview" aria-hidden="true" hidden>
+        <img id="drawing-preview-image" alt="" decoding="async">
+    </div>
     <script>
         const pageDrawingList = {{ rows | tojson | safe }};
         const chatStateKey = 'solidcog.chat-state.v1';
@@ -247,6 +251,11 @@
             const qwenKeyNote = document.getElementById('qwen-key-note');
             const qwenKeyResult = document.getElementById('qwen-key-result');
             const qwenModelTests = document.getElementById('qwen-model-tests');
+            const previewCard = document.getElementById('drawing-preview');
+            const previewImage = document.getElementById('drawing-preview-image');
+            let previewX = 0;
+            let previewY = 0;
+            let previewFrame = null;
             let modalReturnFocus = null;
             let allDrawings = [...pageDrawingList];
             let drawingListLoaded = false;
@@ -1052,6 +1061,85 @@
                     else chatInput.focus();
                 });
             });
+            function positionDrawingPreview() {
+                if (previewCard.hidden) return;
+                const gap = 18;
+                const rect = previewCard.getBoundingClientRect();
+                let left = previewX + gap;
+                let top = previewY + gap;
+                if (left + rect.width > window.innerWidth - 12) left = previewX - rect.width - gap;
+                if (top + rect.height > window.innerHeight - 12) top = previewY - rect.height - gap;
+                left = Math.max(12, Math.min(left, window.innerWidth - rect.width - 12));
+                top = Math.max(12, Math.min(top, window.innerHeight - rect.height - 12));
+                previewCard.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+            }
+
+            function showDrawingPreview(trigger, x, y) {
+                const url = trigger && trigger.dataset.previewUrl;
+                if (!url) return;
+                previewX = x;
+                previewY = y;
+                previewImage.src = url;
+                previewImage.alt = trigger.dataset.previewAlt || '图纸预览';
+                previewCard.hidden = false;
+                previewCard.setAttribute('aria-hidden', 'false');
+                requestAnimationFrame(positionDrawingPreview);
+            }
+
+            function hideDrawingPreview() {
+                previewCard.hidden = true;
+                previewCard.setAttribute('aria-hidden', 'true');
+            }
+
+            function previewTriggerFrom(target) {
+                return target && target.closest ? target.closest('[data-preview-url]') : null;
+            }
+
+            function handlePreviewOver(event) {
+                const trigger = previewTriggerFrom(event.target);
+                if (!trigger || (event.relatedTarget && trigger.contains(event.relatedTarget))) return;
+                showDrawingPreview(trigger, event.clientX, event.clientY);
+            }
+
+            function handlePreviewOut(event) {
+                const trigger = previewTriggerFrom(event.target);
+                if (trigger && !trigger.contains(event.relatedTarget)) hideDrawingPreview();
+            }
+
+            function handlePreviewMove(event) {
+                if (previewCard.hidden) return;
+                previewX = event.clientX;
+                previewY = event.clientY;
+                if (previewFrame === null) {
+                    previewFrame = requestAnimationFrame(function () {
+                        previewFrame = null;
+                        positionDrawingPreview();
+                    });
+                }
+            }
+
+            document.addEventListener('pointerover', handlePreviewOver);
+            document.addEventListener('pointerout', handlePreviewOut);
+            document.addEventListener('pointermove', handlePreviewMove);
+            // Mouse-event fallback keeps hover working in older WebViews and
+            // in browser automation that does not synthesize PointerEvent.
+            document.addEventListener('mouseover', handlePreviewOver);
+            document.addEventListener('mouseout', handlePreviewOut);
+            document.addEventListener('mousemove', handlePreviewMove);
+            document.addEventListener('focusin', function (event) {
+                const trigger = previewTriggerFrom(event.target);
+                if (!trigger) return;
+                const rect = trigger.getBoundingClientRect();
+                showDrawingPreview(trigger, rect.right, rect.top);
+            });
+            document.addEventListener('focusout', function (event) {
+                if (previewTriggerFrom(event.target)) hideDrawingPreview();
+            });
+            document.addEventListener('pointerdown', hideDrawingPreview);
+            window.addEventListener('resize', hideDrawingPreview);
+            previewImage.addEventListener('load', positionDrawingPreview);
+            previewImage.addEventListener('error', hideDrawingPreview);
+
             function syncBackend(value) {
                 uploadOcrBackend.value = value;
                 document.getElementById('backend-label').textContent = value === 'qwen' ? '云端文字识别' : '本地文字识别';
