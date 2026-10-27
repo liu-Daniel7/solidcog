@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f5f4ef">
+    <title>图纸翻译 · {{ filename|default('未命名图纸', true) }} · SolidCog</title>
+    <style>
+{% include 'styles/workbench.css' %}
+{% include 'styles/translation.css' %}
+    </style>
+</head>
+<body>
+{% set page_filename = filename|default('未命名图纸', true) %}
+{% set page_source_lang = source_lang|default('auto', true) %}
+{% set page_target_lang = target_lang|default('en', true) %}
+    <a class="skip-link" href="#translation-content">跳转到翻译结果</a>
+    <header class="topbar translation-topbar">
+        <a class="brand" href="/home" aria-label="SolidCog 工作台首页"><span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="m16 3 11.3 6.5v13L16 29 4.7 22.5v-13L16 3Z" stroke="currentColor" stroke-width="1.8"/><path d="m4.7 9.5 11.3 7 11.3-7M16 16.5V29M16 3v13.5" stroke="currentColor" stroke-width="1.8"/><path d="m10.3 6.3 11.4 7v12.5" stroke="currentColor" stroke-width="1.3"/></svg></span><span class="brand-title">SolidCog<span>工程图纸智能工作台</span></span></a>
+        <a class="button button-secondary translation-back" href="/home"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 12H5m6-6-6 6 6 6"/></svg><span>返回工作台</span></a>
+    </header>
+
+    <main class="workspace translation-page" id="translation-content" data-drawing-id="{{ drawing_id }}">
+        <noscript><div class="panel noscript-banner" role="alert">此页面需要启用 JavaScript 才能加载翻译结果。</div></noscript>
+
+        <section class="translation-heading" aria-labelledby="page-title">
+            <div class="translation-heading-copy">
+                <span class="eyebrow"><span class="eyebrow-line" aria-hidden="true"></span>DRAWING / TRANSLATION</span>
+                <h1 id="page-title">图纸双语，逐条对照。</h1>
+                <p>标题栏、技术要求与全文补充的逐条翻译。原文与译文并排呈现，便于工程人员快速复核。</p>
+            </div>
+            <div class="translation-meta" aria-label="图纸与语言信息">
+                <div class="translation-meta-item">
+                    <span>图纸名称</span>
+                    <strong>{{ page_filename }}</strong>
+                </div>
+                <div class="translation-meta-item">
+                    <span>翻译方向</span>
+                    <strong>
+                        {% if page_source_lang == 'zh' %}中文{% elif page_source_lang == 'auto' %}自动识别{% else %}{{ page_source_lang }}{% endif %}
+                        <span class="direction-arrow" aria-hidden="true">→</span>
+                        {% if page_target_lang == 'en' %}英语{% else %}{{ page_target_lang }}{% endif %}
+                    </strong>
+                </div>
+            </div>
+        </section>
+
+        <section class="panel translation-toolbar" aria-labelledby="translation-toolbar-title">
+            <h2 class="visually-hidden" id="translation-toolbar-title">翻译操作</h2>
+            <div class="translation-toolbar-main">
+                <div class="language-field">
+                    <label class="control-label" for="target-language">目标语言</label>
+                    <div class="language-select-shell">
+                        <svg class="language-globe" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a14.5 14.5 0 0 1 0 18M12 3a14.5 14.5 0 0 0 0 18"/></svg>
+                        <select class="field language-select" id="target-language" name="target_lang" aria-describedby="target-language-help">
+                            <option value="en"{% if page_target_lang == 'en' %} selected{% endif %}>英语（English）</option>
+                        </select>
+                        <svg class="language-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m8 10 4 4 4-4"/></svg>
+                    </div>
+                    <span class="language-help" id="target-language-help">当前仅提供英语翻译（en）。</span>
+                </div>
+
+                <div class="translation-actions" role="group" aria-label="翻译操作">
+                    <button class="button button-primary" id="translate-missing" type="button" disabled>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h8M8 3v2c0 4.8-2.3 8.4-5 10M6 9c1.2 2.7 3.3 4.8 6 6"/><path d="m14 20 3.5-9 3.5 9m-6-3h5"/></svg>
+                        <span>翻译缺失项</span>
+                    </button>
+                    <button class="button button-secondary" id="retranslate-all" type="button" disabled>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 7v5h-5"/><path d="M19 12a7 7 0 1 0-1.6 5.7"/></svg>
+                        <span>重新翻译全部</span>
+                    </button>
+                    <a class="button button-secondary export-action is-disabled" id="export-csv" href="/drawings/{{ drawing_id }}/translations.csv?target_lang=en" aria-disabled="true" tabindex="-1">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v12m-4-4 4 4 4-4M5 19h14"/></svg>
+                        <span>导出 CSV</span>
+                    </a>
+                </div>
+            </div>
+            <div class="privacy-note" role="note">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3 5 6v5c0 4.4 2.8 8.1 7 9 4.2-.9 7-4.6 7-9V6l-7-3Z"/><path d="m9 12 2 2 4-4"/></svg>
+                <p><strong>隐私说明</strong>提交翻译时只会发送已提取的文字内容；图纸图片不会被上传，也不会随翻译请求发送。</p>
+            </div>
+        </section>
+
+        <div class="request-status" id="request-status" role="status" aria-live="polite" aria-atomic="true" data-tone="info" hidden></div>
+
+        <section class="panel translation-summary-panel" aria-labelledby="summary-title">
+            <div class="summary-heading">
+                <div>
+                    <span class="section-index">TRANSLATION SUMMARY</span>
+                    <h2 id="summary-title">翻译概览</h2>
+                </div>
+                <p class="summary-total">共 <strong id="summary-total">—</strong> 条文本</p>
+            </div>
+            <dl class="translation-summary">
+                <div class="summary-item" data-summary-item="translated">
+                    <dt><span class="summary-dot" aria-hidden="true"></span>已翻译</dt>
+                    <dd data-summary-value="translated">—</dd>
+                </div>
+                <div class="summary-item" data-summary-item="cached">
+                    <dt><span class="summary-dot" aria-hidden="true"></span>已缓存</dt>
+                    <dd data-summary-value="cached">—</dd>
+                </div>
+                <div class="summary-item" data-summary-item="skipped">
+                    <dt><span class="summary-dot" aria-hidden="true"></span>已跳过</dt>
+                    <dd data-summary-value="skipped">—</dd>
+                </div>
+                <div class="summary-item" data-summary-item="needs_review">
+                    <dt><span class="summary-dot" aria-hidden="true"></span>待复核</dt>
+                    <dd data-summary-value="needs_review">—</dd>
+                </div>
+                <div class="summary-item" data-summary-item="failed">
+                    <dt><span class="summary-dot" aria-hidden="true"></span>失败</dt>
+                    <dd data-summary-value="failed">—</dd>
+                </div>
+                <div class="summary-item" data-summary-item="missing">
+                    <dt><span class="summary-dot" aria-hidden="true"></span>缺失</dt>
+                    <dd data-summary-value="missing">—</dd>
+                </div>
+            </dl>
+        </section>
+
+        <section class="translation-layout" aria-label="翻译结果">
+            <aside class="panel translation-sidebar" aria-labelledby="section-nav-title">
+                <h2 id="section-nav-title">结果分区</h2>
+                <nav class="translation-nav" aria-label="翻译分区导航">
+                    <a href="#section-title"><span>标题栏</span><span class="nav-count" data-section-nav-count="title">—</span></a>
+                    <a href="#section-tech"><span>技术要求</span><span class="nav-count" data-section-nav-count="tech">—</span></a>
+                    <a href="#section-extra"><span>全文补充</span><span class="nav-count" data-section-nav-count="extra">—</span></a>
+                </nav>
+            </aside>
+
+            <div class="panel translation-results" id="translation-results" aria-busy="true">
+                <div class="result-state loading-state" id="loading-state" role="status" aria-live="polite">
+                    <span class="loading-spinner" aria-hidden="true"></span>
+                    <h2>正在加载翻译结果</h2>
+                    <p>正在读取标题栏、技术要求与全文补充，请稍候。</p>
+                </div>
+
+                <div class="result-state result-error" id="error-state" role="alert" hidden>
+                    <span class="state-icon" aria-hidden="true">!</span>
+                    <h2>翻译结果加载失败</h2>
+                    <p id="error-message">无法连接本地服务，请确认应用仍在运行。</p>
+                    <button class="button button-primary" id="retry-load" type="button">重新加载</button>
+                </div>
+
+                <div class="result-state result-empty" id="empty-state" hidden>
+                    <span class="empty-graphic" aria-hidden="true"><svg viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M13 5h15l8 8v30H13V5Z"/><path d="M28 5v9h8M18 22h12M18 28h9"/><path d="m18 36 3 3 6-6"/></svg></span>
+                    <h2>暂无翻译文本</h2>
+                    <p>这张图纸还没有可翻译的文本片段。请先完成文字识别，或稍后重新加载。</p>
+                    <a class="button button-secondary" href="/view-ocr/{{ drawing_id }}">查看识别结果</a>
+                </div>
+
+                {% macro translation_section(key, number, title, english_title, description) -%}
+                <section class="translation-section" id="section-{{ key }}" aria-labelledby="section-{{ key }}-heading">
+                    <header class="section-heading">
+                        <div>
+                            <span class="section-index">{{ number }} / {{ english_title }}</span>
+                            <h2 id="section-{{ key }}-heading">{{ title }}</h2>
+                            <p>{{ description }}</p>
+                        </div>
+                        <span class="section-count" data-section-count="{{ key }}">—</span>
+                    </header>
+                    <div class="section-empty" data-section-empty="{{ key }}" hidden>此分区暂无待翻译文本。</div>
+                    <div class="section-table-wrap" data-section-table="{{ key }}" hidden>
+                        <div class="table-scroll">
+                            <table class="translation-table" aria-labelledby="section-{{ key }}-heading">
+                                <colgroup>
+                                    <col class="column-field">
+                                    <col class="column-source">
+                                    <col class="column-translation">
+                                    <col class="column-status">
+                                </colgroup>
+                                <thead>
+                                    <tr>
+                                        <th scope="col">位置/字段</th>
+                                        <th scope="col">原文</th>
+                                        <th scope="col">译文</th>
+                                        <th scope="col">状态</th>
+                                    </tr>
+                                </thead>
+                                <tbody data-section-body="{{ key }}"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </section>
+                {%- endmacro %}
+                <div id="sections-container" hidden>
+                    {{ translation_section('title', '01', '标题栏', 'TITLE BLOCK', '图名、图号、比例与设计单位等图纸索引信息。') }}
+                    {{ translation_section('tech', '02', '技术要求', 'TECHNICAL NOTES', '材料、加工、公差和验收要求，集中核对。') }}
+                    {{ translation_section('extra', '03', '全文补充', 'ADDITIONAL TEXT', '全文识别中未被前两个分区收录的补充文字。') }}
+                </div>
+            </div>
+        </section>
+
+        <p class="translation-disclaimer">机器翻译仅用于辅助审阅；尺寸、公差与关键技术要求请以原始图纸为准。</p>
+    </main>
+
+    <script>
+    (() => {
+        'use strict';
+
+        const statusLabels = {
+            translated: '已翻译',
+            cached: '已缓存',
+            skipped: '已跳过',
+            needs_review: '待复核',
+            failed: '失败',
+            missing: '缺失'
+        };
+        const sectionKeys = ['title', 'tech', 'extra'];
+        const summaryKeys = ['translated', 'cached', 'skipped', 'needs_review', 'failed', 'missing'];
+        const page = document.getElementById('translation-content');
+
+        if (!page) {
+            return;
+        }
+
+        const drawingId = page.dataset.drawingId || '';
+        const els = {
+            language: document.getElementById('target-language'),
+            translateMissing: document.getElementById('translate-missing'),
+            retranslateAll: document.getElementById('retranslate-all'),
+            exportLink: document.getElementById('export-csv'),
+            status: document.getElementById('request-status'),
+            summaryTotal: document.getElementById('summary-total'),
+            summaryValues: {},
+            navCounts: {},
+            sectionCounts: {},
+            sectionBodies: {},
+            sectionTables: {},
+            sectionEmpties: {},
+            loading: document.getElementById('loading-state'),
+            error: document.getElementById('error-state'),
+            errorMessage: document.getElementById('error-message'),
+            empty: document.getElementById('empty-state'),
+            results: document.getElementById('translation-results'),
+            sections: document.getElementById('sections-container'),
+            retry: document.getElementById('retry-load')
+        };
+
+        summaryKeys.forEach((key) => {
+            els.summaryValues[key] = document.querySelector('[data-summary-value="' + key + '"]');
+        });
+        sectionKeys.forEach((key) => {
+            els.navCounts[key] = document.querySelector('[data-section-nav-count="' + key + '"]');
+            els.sectionCounts[key] = document.querySelector('[data-section-count="' + key + '"]');
+            els.sectionBodies[key] = document.querySelector('[data-section-body="' + key + '"]');
+            els.sectionTables[key] = document.querySelector('[data-section-table="' + key + '"]');
+            els.sectionEmpties[key] = document.querySelector('[data-section-empty="' + key + '"]');
+        });
+
+        let busy = false;
+        let hasLoaded = false;
+
+        function safeText(value) {
+            return typeof value === 'string' ? value : '';
+        }
+
+        function toCount(value) {
+            return Number.isFinite(value) && value >= 0 ? Math.floor(value) : 0;
+        }
+
+        function setStatus(message, tone) {
+            els.status.textContent = message;
+            els.status.dataset.tone = tone || 'info';
+            els.status.hidden = !message;
+        }
+
+        function syncControls() {
+            const actionsDisabled = busy || !hasLoaded;
+            els.translateMissing.disabled = actionsDisabled;
+            els.retranslateAll.disabled = actionsDisabled;
+            els.language.disabled = busy;
+            els.retry.disabled = busy;
+
+            if (actionsDisabled) {
+                els.exportLink.classList.add('is-disabled');
+                els.exportLink.setAttribute('aria-disabled', 'true');
+                els.exportLink.setAttribute('tabindex', '-1');
+            } else {
+                els.exportLink.classList.remove('is-disabled');
+                els.exportLink.removeAttribute('aria-disabled');
+                els.exportLink.removeAttribute('tabindex');
+            }
+            els.results.setAttribute('aria-busy', String(busy));
+        }
+
+        function setBusy(nextBusy) {
+            busy = nextBusy;
+            syncControls();
+        }
+
+        function translationsEndpoint() {
+            return '/drawings/' + encodeURIComponent(drawingId) + '/translations';
+        }
+
+        function currentTargetLang() {
+            return els.language.value || 'en';
+        }
+
+        function updateExportLink() {
+            els.exportLink.href = translationsEndpoint() + '.csv?target_lang=' + encodeURIComponent(currentTargetLang());
+        }
+
+        function resetSummary() {
+            els.summaryTotal.textContent = '—';
+            summaryKeys.forEach((key) => {
+                els.summaryValues[key].textContent = '—';
+            });
+            sectionKeys.forEach((key) => {
+                els.navCounts[key].textContent = '—';
+                els.sectionCounts[key].textContent = '—';
+            });
+        }
+
+        function showLoadingState() {
+            resetSummary();
+            els.loading.hidden = false;
+            els.error.hidden = true;
+            els.empty.hidden = true;
+            els.sections.hidden = true;
+            setStatus('', 'info');
+        }
+
+        function showErrorMessage(message) {
+            els.loading.hidden = true;
+            els.error.hidden = false;
+            els.empty.hidden = true;
+            els.sections.hidden = true;
+            els.errorMessage.textContent = message;
+            setStatus('', 'info');
+        }
+
+        function normalizeError(error) {
+            if (error instanceof TypeError) {
+                return '无法连接本地服务，请确认应用仍在运行，然后重试。';
+            }
+            if (error && typeof error.message === 'string' && error.message) {
+                return error.message;
+            }
+            return '发生未知错误，请稍后重试。';
+        }
+
+        function errorDetail(payload) {
+            const detail = payload && payload.detail;
+            if (typeof detail === 'string') {
+                return detail.trim();
+            }
+            if (Array.isArray(detail) && detail.length > 0) {
+                const messages = detail
+                    .map((item) => item && typeof item.msg === 'string' ? item.msg.trim() : '')
+                    .filter(Boolean);
+                return messages.length > 0
+                    ? '请求参数校验失败：' + messages.join('；')
+                    : '请求参数校验失败，请检查请求参数后重试。';
+            }
+            return '';
+        }
+
+        async function readJsonResponse(response) {
+            let payload = null;
+            try {
+                payload = await response.json();
+            } catch (error) {
+                // Some local/proxy failures return HTML or an empty body.
+            }
+            if (!response.ok) {
+                const detail = errorDetail(payload);
+                if (detail) {
+                    throw new Error(detail);
+                }
+                if (response.status === 422) {
+                    throw new Error('请求参数校验失败，请检查请求参数后重试。');
+                }
+                throw new Error('服务返回错误（HTTP ' + response.status + '）。');
+            }
+            if (!payload || typeof payload !== 'object' || !Array.isArray(payload.segments)) {
+                throw new Error('服务返回的数据格式不正确。');
+            }
+            return payload;
+        }
+
+        async function requestJson(url, options = {}) {
+            const response = await fetch(url, {
+                mode: 'same-origin',
+                credentials: 'same-origin',
+                cache: 'no-store',
+                headers: Object.assign({ Accept: 'application/json' }, options.headers || {}),
+                method: options.method || 'GET',
+                body: options.body
+            });
+            return readJsonResponse(response);
+        }
+
+        function summaryFromPayload(payload) {
+            const summary = payload.summary && typeof payload.summary === 'object' ? payload.summary : {};
+            const counts = {};
+            summaryKeys.forEach((key) => {
+                counts[key] = toCount(summary[key]);
+            });
+            counts.total = Number.isFinite(summary.total)
+                ? toCount(summary.total)
+                : payload.segments.length;
+            return counts;
+        }
+
+        function updateSummary(counts) {
+            els.summaryTotal.textContent = String(counts.total);
+            summaryKeys.forEach((key) => {
+                els.summaryValues[key].textContent = String(counts[key]);
+            });
+        }
+
+        function appendCellLabel(cell, label) {
+            const cellLabel = document.createElement('span');
+            cellLabel.className = 'cell-label';
+            cellLabel.textContent = label;
+            cell.appendChild(cellLabel);
+        }
+
+        function appendTextCell(row, className, text, label) {
+            const cell = document.createElement('td');
+            cell.className = className;
+            appendCellLabel(cell, label);
+            if (text) {
+                cell.appendChild(document.createTextNode(text));
+            } else {
+                const placeholder = document.createElement('span');
+                placeholder.className = 'cell-placeholder';
+                placeholder.textContent = '—';
+                cell.appendChild(placeholder);
+            }
+            row.appendChild(cell);
+        }
+
+        function resolveStatus(segment) {
+            const rawStatus = safeText(segment.status).trim();
+            if (rawStatus) {
+                return rawStatus;
+            }
+            return safeText(segment.translated_text) ? 'translated' : 'missing';
+        }
+
+        function buildRow(segment) {
+            const row = document.createElement('tr');
+            const status = resolveStatus(segment);
+            if (statusLabels[status]) {
+                row.dataset.status = status;
+            } else {
+                row.dataset.status = 'unknown';
+            }
+
+            const fieldCell = document.createElement('td');
+            fieldCell.className = 'field-cell';
+            appendCellLabel(fieldCell, '位置/字段');
+            const label = safeText(segment.label).trim();
+            const segmentKey = safeText(segment.segment_key).trim();
+            const fieldName = document.createElement('span');
+            fieldName.className = 'field-name';
+            fieldName.textContent = label || segmentKey || '—';
+            fieldCell.appendChild(fieldName);
+            if (label && segmentKey && segmentKey !== label) {
+                const key = document.createElement('span');
+                key.className = 'segment-key';
+                key.textContent = segmentKey;
+                fieldCell.appendChild(key);
+            }
+            row.appendChild(fieldCell);
+
+            appendTextCell(row, 'segment-text source-text', safeText(segment.source_text), '原文');
+
+            const translationCell = document.createElement('td');
+            translationCell.className = 'segment-text translation-text';
+            appendCellLabel(translationCell, '译文');
+            const translatedText = safeText(segment.translated_text);
+            if (translatedText) {
+                translationCell.appendChild(document.createTextNode(translatedText));
+            } else {
+                const placeholder = document.createElement('span');
+                placeholder.className = 'cell-placeholder';
+                placeholder.textContent = status === 'missing' ? '尚未翻译' : '—';
+                translationCell.appendChild(placeholder);
+            }
+            row.appendChild(translationCell);
+
+            const statusCell = document.createElement('td');
+            statusCell.className = 'status-cell';
+            appendCellLabel(statusCell, '状态');
+            const badge = document.createElement('span');
+            badge.className = 'status-badge';
+            badge.dataset.status = statusLabels[status] ? status : 'unknown';
+            badge.textContent = statusLabels[status] || status || statusLabels.missing;
+            statusCell.appendChild(badge);
+
+            const errorText = safeText(segment.error).trim();
+            if (errorText) {
+                const error = document.createElement('span');
+                error.className = 'segment-error';
+                error.textContent = errorText;
+                statusCell.appendChild(error);
+            }
+            row.appendChild(statusCell);
+
+            return row;
+        }
+
+        function renderSection(key, segments) {
+            const body = els.sectionBodies[key];
+            body.replaceChildren();
+            segments.forEach((segment) => {
+                body.appendChild(buildRow(segment));
+            });
+
+            const count = segments.length;
+            els.sectionCounts[key].textContent = String(count) + ' 条';
+            els.navCounts[key].textContent = String(count);
+            els.sectionTables[key].hidden = count === 0;
+            els.sectionEmpties[key].hidden = count > 0;
+        }
+
+        function renderPayload(payload) {
+            const counts = summaryFromPayload(payload);
+            const segments = payload.segments.filter((segment) => segment && typeof segment === 'object' && !Array.isArray(segment));
+
+            updateSummary(counts);
+            sectionKeys.forEach((key) => {
+                renderSection(key, segments.filter((segment) => segment.section === key));
+            });
+
+            els.loading.hidden = true;
+            els.error.hidden = true;
+            els.sections.hidden = segments.length === 0;
+            els.empty.hidden = segments.length > 0;
+        }
+
+        function countSummaryText(counts) {
+            return '已翻译 ' + counts.translated +
+                '，已缓存 ' + counts.cached +
+                '，已跳过 ' + counts.skipped +
+                '，待复核 ' + counts.needs_review +
+                '，失败 ' + counts.failed +
+                '，缺失 ' + counts.missing + '。';
+        }
+
+        async function loadTranslations() {
+            if (busy) {
+                return;
+            }
+            showLoadingState();
+            setBusy(true);
+            try {
+                const payload = await requestJson(
+                    translationsEndpoint() + '?target_lang=' + encodeURIComponent(currentTargetLang())
+                );
+                renderPayload(payload);
+                hasLoaded = true;
+                const counts = summaryFromPayload(payload);
+                setStatus('翻译结果已加载，共 ' + counts.total + ' 条文本。', 'success');
+            } catch (error) {
+                hasLoaded = false;
+                showErrorMessage(normalizeError(error));
+            } finally {
+                setBusy(false);
+            }
+        }
+
+        async function translate(force) {
+            if (busy || !hasLoaded) {
+                return;
+            }
+            setStatus(force ? '正在重新翻译全部文本，请稍候…' : '正在翻译缺失项，请稍候…', 'loading');
+            setBusy(true);
+            try {
+                const payload = await requestJson(translationsEndpoint(), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ target_lang: currentTargetLang(), force: force })
+                });
+                renderPayload(payload);
+                const counts = summaryFromPayload(payload);
+                const hasProblems = counts.failed > 0 || counts.missing > 0;
+                setStatus('翻译完成。' + countSummaryText(counts), hasProblems ? 'warning' : 'success');
+            } catch (error) {
+                setStatus('翻译请求失败：' + normalizeError(error), 'error');
+            } finally {
+                setBusy(false);
+            }
+        }
+
+        els.translateMissing.addEventListener('click', () => translate(false));
+        els.retranslateAll.addEventListener('click', () => translate(true));
+        els.retry.addEventListener('click', loadTranslations);
+        els.exportLink.addEventListener('click', (event) => {
+            if (busy || !hasLoaded || els.exportLink.getAttribute('aria-disabled') === 'true') {
+                event.preventDefault();
+            }
+        });
+        els.language.addEventListener('change', () => {
+            updateExportLink();
+            if (!busy && hasLoaded) {
+                loadTranslations();
+            }
+        });
+
+        updateExportLink();
+        syncControls();
+        loadTranslations();
+    })();
+    </script>
+</body>
+</html>

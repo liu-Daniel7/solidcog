@@ -26,6 +26,26 @@ class QwenChannelTests(unittest.TestCase):
             "target_lang": "English",
         })
 
+    def test_translate_text_sends_glossary_and_returns_usage(self):
+        client = Mock()
+        completion = SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="Deburr"))],
+            usage=SimpleNamespace(prompt_tokens=12, completion_tokens=3),
+        )
+        client.chat.completions.create.return_value = completion
+        with patch.object(qwen_mt, "_client", return_value=client), patch.object(config, "QWEN_MT_MODEL", "qwen-mt-plus"):
+            result = qwen_mt.translate_text(
+                "去毛刺",
+                target_lang="en",
+                source_lang="zh",
+                terms=[{"source": "去毛刺", "target": "Deburr"}],
+                domains="Mechanical drawing.",
+            )
+        self.assertEqual(result, {"text": "Deburr", "input_tokens": 12, "output_tokens": 3})
+        kwargs = client.chat.completions.create.call_args.kwargs
+        self.assertEqual(kwargs["extra_body"]["translation_options"]["terms"], [{"source": "去毛刺", "target": "Deburr"}])
+        self.assertEqual(kwargs["extra_body"]["translation_options"]["domains"], "Mechanical drawing.")
+
     def test_qwen_vl_connection_test_sends_an_image(self):
         client = Mock()
         client.chat.completions.create.return_value = completion("OK")
