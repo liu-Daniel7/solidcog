@@ -365,7 +365,7 @@ def _fallback_title(text: str) -> str:
         if not value:
             continue
         cells = _split_title_line(value)
-        if cells and _is_parameter_cell(cells[0]):
+        if cells and _is_parameter_cell(cells[0]) and not _field_label(cells[0]):
             continue
         is_title_line = any(_field_label(cell) or _is_header_cell(cell) for cell in cells)
         is_unit_line = bool(re.search(r"(?:公司|集团|厂|大学|学院|COMPANY|GROUP)\s*$", _compact(value), re.I))

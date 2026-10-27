@@ -79,6 +79,10 @@ A | CFC | 初版 |"""
         self.assertEqual(labels["图号"], "LJT01.01")
         self.assertNotIn("配对齿轮", labels.get("图号", ""))
         self.assertNotIn("代号", labels.get("项目", ""))
+        alias_fallback = build_segments("", "", "图样代号 | LJT01.01\n图样名称 | 法兰盘")
+        alias_labels = {segment["label"]: segment["source_text"] for segment in alias_fallback}
+        self.assertEqual(alias_labels["图号"], "LJT01.01")
+        self.assertEqual(alias_labels["图名"], "法兰盘")
 
     def test_technical_notes_keep_numbering_and_merge_continuations(self):
         tech = """技术要求：
