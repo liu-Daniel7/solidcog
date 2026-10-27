@@ -185,6 +185,7 @@ solidcog/
 | [OCR 验证记录](docs/ocr-validation-2026-10-04.md) | 识别完整性、分区与已知限制 |
 | [翻译 MVP 合同](docs/translation-mvp-contract.md) | 分段、接口、状态与 CSV 契约 |
 | [翻译图集验证](docs/translation-atlas-validation-2026-10-27.md) | 图集样本、OCR 边界与翻译纵切验证 |
+| [10 张图翻译测试报告](docs/translation-test-report-2026-10-27.md) | 真实 Qwen-VL/Qwen-MT 测试、指标与问题清单 |
 | [工作台验证记录](docs/workbench-design-validation-2026-10-04.md) | 响应式布局、浏览器交互与验证范围 |
 | [MinerU 版本核对](docs/mineru-upgrade-2026-10-04.md) | 2026-10-04 的版本升级与兼容性记录 |
 | [第三方组件与标识](docs/attribution.md) | MinerU 署名要求与组件归属 |
