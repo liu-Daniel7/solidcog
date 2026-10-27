@@ -71,7 +71,7 @@ SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译�
 | 路径 | 本地运行时 | 准备事项 | 安装文档 |
 | --- | --- | --- | --- |
 | macOS / Apple Silicon | llama.cpp / Metal | Python 3.12、llama-server、GGUF 模型及视觉投影文件 | [macOS 安装](docs/installation.md#macos--apple-silicon) |
-| Windows / WSL2 | PyTorch / CUDA | Python 3.12、WSL2 Ubuntu、NVIDIA GPU；MinerU 接口兼容性需单独核对 | [Windows 安装与限制](docs/installation.md#windows--wsl2) |
+| Windows / WSL2 | PyTorch / CUDA | Python 3.12、WSL2 Ubuntu、NVIDIA GPU；MinerU 需兼容旧 `/file_parse` 接口 | [Windows 安装与说明](docs/installation.md#windows--wsl2) |
 | 仅使用云端 OCR | 主应用 + DashScope | Python 3.12、Qwen API Key；不需要本地模型 | [云端 OCR 最小安装](docs/installation.md#仅使用云端-ocr) |
 
 **先选运行方式，再装依赖。** macOS 使用 `platforms/macos/requirements.txt`，Windows 主应用使用根目录 `requirements.txt`；DashScope Key 在启用 Qwen 云端识别或 Qwen-MT 通道时需要。
@@ -95,7 +95,7 @@ SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译�
 ### 当前运行边界
 
 - **macOS 本地链路：** 支持本地 OCR 与流式图纸问答；GGUF 权重不随仓库分发，安装脚本也不负责下载或转换。
-- **Windows 本地链路：** 仓库保留 WSL/CUDA 实现及历史验证记录，但调度器仍依赖 MinerU 旧 `/file_parse` 协议，不能直接假定最新版完整 MinerU 可用；Windows 调度器尚未实现网页所调用的流式问答接口。
+- **Windows / WSL2 本地链路：** MechVL 使用 Transformers/CUDA 推理，支持网页流式问答；WSL 服务通过 `/analyze/stream` 输出 SSE，模型调度器通过 `/mechvl/analyze/stream` 转发。MinerU 仍要求兼容 `/file_parse`、`--enable-vlm-preload` 和项目使用的旧响应结构，部署时需单独核对版本。
 - **云端 OCR：** 无本地模型也能识别、归档和检索；MechVL 问答仍需本地模型服务。
 - **部署范围：** 启动器默认绑定 `127.0.0.1`，面向单机使用。当前没有面向公网的账号与权限系统，客户部署需另行配置访问控制，并保留 MinerU 标识。
 
@@ -153,9 +153,9 @@ flowchart TD
 
 ### 验证与性能
 
-仓库包含路由、OCR 适配、文件处理、模型服务与调度器回归测试。测试命令见下文；自动化测试使用模拟模型响应，不等于真实图纸准确率评测。
+仓库包含路由、OCR 适配、文件处理、模型服务与调度器回归测试，包括 Windows/WSL 调度器 SSE 转发契约。测试命令见下文；自动化测试使用模拟模型响应，不等于真实图纸准确率评测。
 
-现有真实模型记录涵盖 **RTX 4060 Laptop 8 GB / WSL2** 和 **Apple M2 / 24 GB 统一内存**。冷启动与模型切换可能占用明显时间，分块识别也会增加调用与耗时。两端历史数据的图纸、量化与环境不同，不宜直接比较速度。
+Windows / WSL2 的真实联调记录（2026-10-27）使用 **RTX 4060 Laptop 8 GB**：MechVL CUDA 模型加载、网页调度器 SSE 链路和单页 MinerU `/file_parse` 均已通过；单页 MinerU 测试从冷启动至返回结果约 84 秒（含模型切换与预载）。实测依赖版本和适用边界见 [Windows 安装与验证说明](docs/installation.md#windows--wsl2)。冷启动与模型切换可能占用明显时间，分块识别也会增加调用与耗时。两端历史数据的图纸、量化与环境不同，不宜直接比较速度。
 
 完整阶段耗时、测试环境、论文基准与重构对照见[工程设计与历史验证记录](docs/engineering-reference.md)。其中 macOS 2026-10-06 的结果使用旧引擎 `0.1.2`，不是当前 `0.1.5` 的复测成绩。
 
@@ -198,7 +198,7 @@ solidcog/
 
 ```powershell
 # Windows
-.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe -X utf8 -m unittest discover -s tests -v
 ```
 
 服务启动后，可在 [主应用 API 文档](http://127.0.0.1:8000/docs) 查看完整接口，在[调度器状态](http://127.0.0.1:8090/status) 查看模型模式、忙碌状态与切换进度，在[关于页](http://127.0.0.1:8000/about) 查看组件署名。

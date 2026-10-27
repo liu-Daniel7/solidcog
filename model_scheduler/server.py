@@ -4,7 +4,7 @@ from pathlib import Path
 
 import requests
 from fastapi import FastAPI, File, HTTPException, UploadFile
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from scheduler import ModelScheduler, ServiceSpec, TimingHistory
@@ -152,3 +152,37 @@ def mechvl_analyze(request: AnalyzeRequest):
     finally:
         if operation_started:
             scheduler.end_operation()
+
+
+@app.post("/mechvl/analyze/stream")
+def mechvl_analyze_stream(request: AnalyzeRequest):
+    operation_started = False
+    response = None
+    try:
+        scheduler.ensure_mode("mechvl", timeout=360)
+        scheduler.begin_operation("MechVL 审核")
+        operation_started = True
+        response = session.post("http://127.0.0.1:8100/analyze/stream",
+                                json=request.model_dump(), stream=True, timeout=(10, 600))
+        response.raise_for_status()
+    except (TimeoutError, RuntimeError, requests.RequestException) as exc:
+        if response is not None:
+            response.close()
+        if operation_started:
+            scheduler.end_operation()
+        if isinstance(exc, TimeoutError):
+            raise HTTPException(504, str(exc)) from exc
+        raise HTTPException(503, str(exc)) from exc
+
+    def events():
+        try:
+            for line in response.iter_lines(chunk_size=1):
+                yield line + b"\n"
+        except requests.RequestException:
+            yield b'data: {"error":"MechVL stream interrupted"}\n\n'
+        finally:
+            response.close()
+            scheduler.end_operation()
+
+    return StreamingResponse(events(), media_type="text/event-stream",
+                             headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"})
