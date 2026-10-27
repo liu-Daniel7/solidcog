@@ -35,6 +35,7 @@ QWEN_MT_MODEL = os.getenv("QWEN_MT_MODEL", "qwen-mt-plus")
 QWEN_MT_BASE_URL = (os.getenv("QWEN_MT_BASE_URL") or QWEN_BASE_URL).rstrip("/")
 QWEN_MT_TIMEOUT_SECONDS = max(1, int(os.getenv("QWEN_MT_TIMEOUT_SECONDS", "60")))
 QWEN_OCR_MAX_PAGES = max(1, int(os.getenv("QWEN_OCR_MAX_PAGES", "10")))
+TRANSLATION_MAX_WORKERS = max(1, int(os.getenv("TRANSLATION_MAX_WORKERS", "3")))
 MECHVL_TIMEOUT_SECONDS = max(1, int(os.getenv("MECHVL_TIMEOUT_SECONDS", "180")))
 MODEL_SCHEDULER_BASE_URL = os.getenv(
     "MODEL_SCHEDULER_BASE_URL", "http://127.0.0.1:8090"

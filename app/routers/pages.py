@@ -42,11 +42,25 @@ def view_ocr(request: Request, drawing_id: int):
     if not drawing:
         raise HTTPException(404, "未找到图纸")
     return templates.TemplateResponse(request, "ocr_view.html", {
+        "drawing_id": drawing_id,
         "filename": str(drawing["filename"] or ""),
         "title_text": str(drawing["title_text"] or ""),
         "tech_text": str(drawing["tech_text"] or ""),
         "all_text": str(drawing["all_text"] or ""),
         "layout": str(drawing["layout"] or "unknown"),
+    })
+
+
+@router.get("/translate/{drawing_id}", response_class=HTMLResponse)
+def translate_view(request: Request, drawing_id: int):
+    drawing = repository.get(drawing_id)
+    if not drawing:
+        raise HTTPException(404, "未找到图纸")
+    return templates.TemplateResponse(request, "translation_view.html", {
+        "drawing_id": drawing_id,
+        "filename": str(drawing["filename"] or ""),
+        "source_lang": "zh",
+        "target_lang": "en",
     })
 
 

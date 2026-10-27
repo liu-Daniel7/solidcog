@@ -1,3 +1,4 @@
+import logging
 import shutil
 import threading
 from datetime import datetime
@@ -8,6 +9,8 @@ from PIL import Image
 
 from app import config
 from app.repositories import drawings as repository
+from app.repositories import translations as translations_repository
+from app.services import segments
 from app.services.ocr import run_ocr
 from app.services.images import RASTER_SUFFIXES
 
@@ -16,6 +19,7 @@ from app.services.images import RASTER_SUFFIXES
 # Bound admission at the application process so concurrent browser requests do
 # not create an unbounded thread backlog or race the model lifecycle.
 _OCR_GATE = threading.BoundedSemaphore(config.MAX_CONCURRENT_OCR)
+LOGGER = logging.getLogger(__name__)
 
 
 def template_rows(rows: list[dict]) -> list[tuple]:
@@ -76,6 +80,10 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
             "upload_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             **values,
         })
+        try:
+            segments.ensure_segments(drawing_id)
+        except Exception:
+            LOGGER.exception("Unable to build translation segments for drawing %s", drawing_id)
         return {
             "id": drawing_id,
             "filename": filename,
@@ -96,9 +104,12 @@ def delete(drawing_id: int) -> None:
     if not drawing:
         raise HTTPException(404, "未找到该图纸")
     (config.UPLOAD_DIR / drawing["filename"]).unlink(missing_ok=True)
+    translations_repository.delete_for_drawing(drawing_id)
     repository.delete(drawing_id)
 
 
 def delete_all() -> None:
-    for filename in repository.delete_all():
+    filenames = repository.delete_all()
+    translations_repository.delete_all()
+    for filename in filenames:
         (config.UPLOAD_DIR / filename).unlink(missing_ok=True)

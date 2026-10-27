@@ -30,28 +30,62 @@ def _api_error(exc: Exception) -> RuntimeError:
     return RuntimeError(f"Qwen-MT API 调用失败: {exc}")
 
 
+LANGUAGE_NAMES = {
+    "zh": "Chinese",
+    "en": "English",
+    "ja": "Japanese",
+    "ko": "Korean",
+    "de": "German",
+    "fr": "French",
+    "es": "Spanish",
+    "pt": "Portuguese",
+    "ru": "Russian",
+    "it": "Italian",
+}
+
+
+def translate_text(
+    text: str,
+    target_lang: str = "en",
+    source_lang: str = "zh",
+    terms: list[dict] | None = None,
+    domains: str | None = None,
+) -> dict:
+    """Translate one segment and return text plus token usage."""
+    options = {
+        "source_lang": LANGUAGE_NAMES.get(source_lang, "auto" if source_lang == "auto" else source_lang),
+        "target_lang": LANGUAGE_NAMES.get(target_lang, target_lang),
+    }
+    if terms:
+        options["terms"] = terms
+    if domains:
+        options["domains"] = domains
+    completion = _client().chat.completions.create(
+        model=config.QWEN_MT_MODEL,
+        messages=[{"role": "user", "content": text}],
+        extra_body={"translation_options": options},
+        timeout=config.QWEN_MT_TIMEOUT_SECONDS,
+    )
+    translated = (completion.choices[0].message.content or "").strip()
+    if not translated:
+        raise RuntimeError("Qwen-MT 返回空结果")
+    usage = getattr(completion, "usage", None)
+    return {
+        "text": translated,
+        "input_tokens": int(getattr(usage, "prompt_tokens", 0) or 0),
+        "output_tokens": int(getattr(usage, "completion_tokens", 0) or 0),
+    }
+
+
 def test_connection() -> dict:
     """Make a tiny translation request to verify the shared key and model access."""
     try:
-        completion = _client().chat.completions.create(
-            model=config.QWEN_MT_MODEL,
-            messages=[{"role": "user", "content": "测试"}],
-            extra_body={
-                "translation_options": {
-                    "source_lang": "Chinese",
-                    "target_lang": "English",
-                }
-            },
-            timeout=min(20, config.QWEN_MT_TIMEOUT_SECONDS),
-        )
-        translated = (completion.choices[0].message.content or "").strip()
-        if not translated:
-            raise RuntimeError("Qwen-MT 返回空结果")
+        result = translate_text("测试", target_lang="en", source_lang="zh")
         return {
             "ok": True,
             "model": config.QWEN_MT_MODEL,
             "message": "连接正常",
-            "sample": translated[:80],
+            "sample": result["text"][:80],
         }
     except Exception as exc:
         return {
