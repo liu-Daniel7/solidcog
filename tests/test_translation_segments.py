@@ -15,6 +15,7 @@ A | CFC | 初版 |"""
         self.assertEqual(labels["图名"], "面板8")
         self.assertEqual(labels["图号"], "BJ-SG2-1-09A-12")
         self.assertEqual(labels["材料"], "06Cr19Ni10")
+        self.assertEqual(labels["比例"], "1:5")
         self.assertEqual(labels["图幅"], "A3")
         self.assertEqual(labels["页码"], "第1页/共1页")
         self.assertEqual(labels["版次记录"], "A | CFC | 初版")
@@ -31,10 +32,16 @@ A | CFC | 初版 |"""
         segments = build_segments("设计 | 张三\n图名 | 面板8")
         labels = {segment["label"]: segment["source_text"] for segment in segments}
         self.assertEqual(labels["设计"], "张三")
-        mixed = build_segments("图名：面板8 | 图号：LJT01.01")
+        mixed = build_segments("图名：面板8 | 图号 LJT01.01")
         mixed_labels = {segment["label"]: segment["source_text"] for segment in mixed}
         self.assertEqual(mixed_labels["图名"], "面板8")
         self.assertEqual(mixed_labels["图号"], "LJT01.01")
+        aliases = build_segments("零件图号 | LJT01.01\n图样名称 | 法兰盘\n图样代号 | LJT04.17")
+        alias_labels = {segment["label"]: segment["source_text"] for segment in aliases}
+        self.assertEqual(alias_labels["图号"], "LJT04.17")
+        self.assertEqual(alias_labels["图名"], "法兰盘")
+        paired = build_segments("图名 | 配对齿轮")
+        self.assertEqual({segment["label"]: segment["source_text"] for segment in paired}["图名"], "配对齿轮")
 
     def test_all_text_only_fallback_recovers_title_and_requirements(self):
         all_text = "技术要求\n1. 去毛刺\n2. 热处理\n图名 | 面板8\n折弯图"

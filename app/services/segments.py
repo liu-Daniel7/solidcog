@@ -24,7 +24,11 @@ SECTION_LABELS = {
 # together with its English counterpart, for example "图名DRAWING NAME".
 FIELD_ALIASES = {
     "零件名称": "零件名称",
+    "零件图号": "图号",
+    "图样代号": "图号",
     "图纸编号": "图号",
+    "零件材料": "材料",
+    "图样名称": "图名",
     "图纸名称": "图名",
     "图名": "图名",
     "名称": "名称",
@@ -126,6 +130,22 @@ def _is_header_cell(cell: str) -> bool:
     return any(token in compact for token in _HEADER_TOKENS)
 
 
+def _is_parameter_cell(cell: str) -> bool:
+    compact = _compact(cell)
+    return any(token in compact for token in _PARAMETER_TOKENS)
+
+
+def _split_pipe_cell(cell: str) -> list[str]:
+    colon = re.match(r"^([^：:]{1,30})[：:]\s*(.+)$", cell)
+    if colon and _field_label(colon.group(1)):
+        return [colon.group(1).strip(), colon.group(2).strip()]
+    for alias, _ in _ALIASES:
+        match = re.match(rf"^{re.escape(alias)}\s+(.+)$", cell, re.I)
+        if match:
+            return [alias, match.group(1).strip()]
+    return [cell]
+
+
 def _embedded_page_value(cell: str) -> str | None:
     match = re.search(r"第\s*\d+\s*页(?:\s*/?\s*共\s*\d+\s*页)?", cell)
     return match.group(0) if match else None
@@ -164,11 +184,8 @@ def _split_title_line(line: str) -> list[str]:
         cells = []
         for cell in line.split("|"):
             cell = cell.strip()
-            colon = re.match(r"^([^：:]{1,30})[：:]\s*(.+)$", cell)
-            if colon:
-                cells.extend([colon.group(1).strip(), colon.group(2).strip()])
-            elif cell:
-                cells.append(cell)
+            if cell:
+                cells.extend(_split_pipe_cell(cell))
         return cells
     colon = re.match(r"^([^：:]{1,30})[：:]\s*(.+)$", line)
     if colon:
@@ -188,13 +205,15 @@ def _title_rows(text: str) -> list[dict]:
             line = line.strip()
             if not line or _is_frame_noise(line):
                 continue
-            if _COPYRIGHT.search(line) or any(token in line for token in _PARAMETER_TOKENS):
+            if _COPYRIGHT.search(line):
                 continue
             cells = _split_title_line(line)
             if not cells:
                 continue
             labels = [_field_label(cell) for cell in cells]
             header_flags = [_is_header_cell(cell) for cell in cells]
+            if not any(labels) and any(_is_parameter_cell(cell) for cell in cells):
+                continue
             if all(label or header for label, header in zip(labels, header_flags)):
                 # A pure header row such as 版次 | 状态 | 说明 | ...
                 continue
@@ -245,11 +264,15 @@ def _title_rows(text: str) -> list[dict]:
                 previous = index - 1
                 while previous >= 0 and (not cells[previous] or labels[previous] or previous in used):
                     previous -= 1
-                if previous >= 0 and not header_flags[previous] and not (label == "单位" and re.fullmatch(r"\d{1,4}", cells[previous])):
+                if previous >= 0 and not header_flags[previous] and not _is_parameter_cell(cells[previous]) and not (label == "单位" and re.fullmatch(r"\d{1,4}", cells[previous])):
                     _append_unique(rows, label, cells[previous], seen)
                     used.add(previous)
                 index += 1
-    material = re.match(r"^\s*((?=[A-Z0-9#.\-]*\d)[A-Z0-9#.\-]{2,20})\s*\|", text or "", re.I)
+    material = None
+    for line in (text or "").splitlines()[:8]:
+        material = re.match(r"^\s*((?=[A-Z0-9#.\-]*\d)[A-Z0-9#.\-]{2,20})\s*\|", line, re.I)
+        if material:
+            break
     if material and not any(row["label"] == "材料" for row in rows):
         rows.insert(0, {"label": "材料", "source_text": material.group(1)})
     return rows
@@ -339,9 +362,11 @@ def _fallback_title(text: str) -> str:
     has_name = False
     for index, line in enumerate(lines):
         value = line.strip()
-        if not value or any(token in value for token in _PARAMETER_TOKENS):
+        if not value:
             continue
         cells = _split_title_line(value)
+        if cells and _is_parameter_cell(cells[0]):
+            continue
         is_title_line = any(_field_label(cell) or _is_header_cell(cell) for cell in cells)
         is_unit_line = bool(re.search(r"(?:公司|集团|厂|大学|学院|COMPANY|GROUP)\s*$", _compact(value), re.I))
         if is_title_line or is_unit_line:
