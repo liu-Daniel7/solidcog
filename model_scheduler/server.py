@@ -44,6 +44,7 @@ def build_scheduler() -> ModelScheduler:
             health_url="http://127.0.0.1:8100/health",
             log_path=STATE_DIR / "mechvl.log",
             startup_timeout=int(os.getenv("MECHVL_STARTUP_TIMEOUT", "900")),
+            env={"HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
         ),
     }
     return ModelScheduler(specs, TimingHistory(STATE_DIR / "timings.json"))
