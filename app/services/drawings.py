@@ -11,6 +11,7 @@ from PIL import Image
 from app import config
 from app.repositories import drawings as repository
 from app.repositories import kit_checks as kit_repository
+from app.repositories import scans as scan_repository
 from app.repositories import translations as translations_repository
 from app.services import segments
 from app.services.ocr import run_ocr
@@ -45,6 +46,16 @@ def template_rows(rows: list[dict]) -> list[tuple]:
         )
         for index, row in enumerate(rows, 1)
     ]
+
+
+def _filename_title_hint(original_name: str) -> str:
+    stem = Path(original_name or "").stem
+    for separator in ("-", "_"):
+        if separator in stem:
+            _, remainder = stem.split(separator, 1)
+            if remainder and not remainder.isdigit():
+                return remainder.strip()
+    return ""
 
 
 def save_upload(file: UploadFile, ocr_backend: str = "qwen", batch_id: str | None = None) -> dict:
@@ -83,6 +94,7 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen", batch_id: str | Non
         with path.open("wb") as destination:
             shutil.copyfileobj(file.file, destination)
         result = run_ocr(path, ocr_backend)
+        scan_result = result.pop("_scan", None)
         if result.get("error") and not result.get("all_text"):
             raise HTTPException(502, result["error"])
         if result.get("page_errors"):
@@ -91,6 +103,10 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen", batch_id: str | Non
             key: str(result.get(source, ""))
             for key, source in (("title_text", "title_block"), ("tech_text", "tech_block"), ("all_text", "all_text"), ("layout", "layout"))
         }
+        if not segments.extract_title(values["title_text"], values["all_text"]):
+            title_hint = _filename_title_hint(original_name)
+            if title_hint:
+                values["title_text"] = (values["title_text"] + "\n图名：" + title_hint).strip()
         try:
             total_pages = int(page_count(path))
         except Exception:
@@ -115,6 +131,11 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen", batch_id: str | Non
             "ocr_errors": json.dumps(result.get("page_errors") or [], ensure_ascii=False),
             **values,
         })
+        if scan_result and scan_result.get("signature"):
+            try:
+                scan_repository.put(drawing_id, str(scan_result["signature"]), scan_result)
+            except Exception:
+                LOGGER.exception("Unable to save coordinate scan for drawing %s", drawing_id)
         try:
             segments.ensure_segments(drawing_id)
         except Exception:
@@ -143,6 +164,7 @@ def delete(drawing_id: int) -> None:
     translations_repository.delete_for_drawing(drawing_id)
     kit_repository.delete_extraction(drawing_id)
     kit_repository.delete_for_drawing(drawing_id)
+    scan_repository.delete_for_drawing(drawing_id)
     repository.delete(drawing_id)
 
 
@@ -151,5 +173,6 @@ def delete_all() -> None:
     translations_repository.delete_all()
     kit_repository.delete_all_extractions()
     kit_repository.delete_all_check_results()
+    scan_repository.delete_all()
     for filename in filenames:
         (config.UPLOAD_DIR / filename).unlink(missing_ok=True)

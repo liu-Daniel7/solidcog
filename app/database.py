@@ -178,6 +178,18 @@ def init_database() -> None:
             )
             connection.execute(
                 """
+                CREATE TABLE IF NOT EXISTS drawing_scans (
+                    drawing_id INTEGER PRIMARY KEY,
+                    signature TEXT NOT NULL,
+                    scanner TEXT NOT NULL DEFAULT '',
+                    pages_json TEXT NOT NULL,
+                    blocks_json TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                )
+                """
+            )
+            connection.execute(
+                """
                 CREATE TABLE IF NOT EXISTS glossary_terms (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     source_lang TEXT NOT NULL,

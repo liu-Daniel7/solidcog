@@ -55,6 +55,7 @@ MAX_CONCURRENT_OCR = max(1, int(os.getenv("MAX_CONCURRENT_OCR", "1")))
 MAX_BATCH_UPLOADS = max(1, int(os.getenv("MAX_BATCH_UPLOADS", "20")))
 KIT_CHECK_MAX_DRAWINGS = max(1, int(os.getenv("KIT_CHECK_MAX_DRAWINGS", "200")))
 KIT_CHECK_MAX_DEPTH = max(1, int(os.getenv("KIT_CHECK_MAX_DEPTH", "50")))
+KIT_SCAN_DPI = max(150, min(400, int(os.getenv("KIT_SCAN_DPI", "300"))))
 PLACEHOLDER_VALUES = {
     "replace-with-your-qwen-api-key",
     "your-qwen-api-key",

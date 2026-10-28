@@ -58,3 +58,6 @@ docs/third-party-licenses.md
 
 # Local customer/sample drawing batches (not part of the application code)
 /齐套性检查示例图纸/
+
+# macOS Vision OCR runtime binary (compiled from main.swift)
+platforms/macos/vision_ocr/vision_ocr

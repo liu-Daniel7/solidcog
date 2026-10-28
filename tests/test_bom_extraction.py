@@ -262,6 +262,32 @@ class BomExtractionTests(unittest.TestCase):
         self.assertEqual(result["status"], "no_table")
         self.assertEqual(result["rows"], [])
 
+    def test_coordinate_scan_rows_are_used_without_repeating_ocr(self):
+        from app.services import coordinate_scan
+        blocks = [
+            {"text": "序号", "bbox": [0.40, 0.50, 0.02, 0.018], "confidence": 1},
+            {"text": "代号", "bbox": [0.48, 0.50, 0.02, 0.018], "confidence": 1},
+            {"text": "名称", "bbox": [0.62, 0.50, 0.02, 0.018], "confidence": 1},
+            {"text": "数量", "bbox": [0.76, 0.50, 0.02, 0.018], "confidence": 1},
+            {"text": "备注", "bbox": [0.90, 0.50, 0.02, 0.018], "confidence": 1},
+            {"text": "SK.CNC.0003", "bbox": [0.48, 0.44, 0.08, 0.018], "confidence": 1},
+            {"text": "外框", "bbox": [0.62, 0.44, 0.04, 0.018], "confidence": 1},
+            {"text": "2", "bbox": [0.76, 0.44, 0.02, 0.018], "confidence": 1},
+        ]
+        scan = {
+            "available": True,
+            "pages": [{"page": 1, "width": 1000, "height": 800, "blocks": blocks, "regions": coordinate_scan._page_regions(blocks)}],
+            "blocks": blocks,
+            "pages_processed": 1,
+            "pages_total": 1,
+        }
+        with patch.object(bom_extraction.coordinate_scan, "scan_drawing", return_value=scan), \
+             patch.object(bom_extraction, "qwen_configured", return_value=False):
+            result = bom_extraction.extract_drawing(self.drawing, force=True)
+        self.assertEqual(result["source"], "coordinate_scan")
+        self.assertEqual(result["rows"][0]["code"], "SK.CNC.0003")
+        self.assertEqual(result["rows"][0]["name"], "外框")
+
     def test_title_code_removes_filename_extension_and_separator(self):
         self.drawing["title_text"] = ""
         self.assertEqual(bom_extraction._derive_title_code(self.drawing), "SK.CNC.0002")
