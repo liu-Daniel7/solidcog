@@ -86,10 +86,6 @@ button:disabled {
     display: none !important;
 }
 
-.topbar-actions .mobile-check-link {
-    display: none;
-}
-
 .visually-hidden, #files {
     position: absolute;
     width: 1px;
@@ -198,15 +194,6 @@ button:disabled {
     display: flex;
     gap: 24px;
     align-items: center;
-}
-
-.topbar-actions > .button,
-.topbar-actions > .settings {
-    flex-shrink: 0;
-}
-
-.topbar-actions > .button {
-    white-space: nowrap;
 }
 
 .connection-status {
@@ -1876,12 +1863,6 @@ tbody tr:hover {
     }
     .main-nav {
         display: none;
-    }
-    .topbar-actions .mobile-check-link {
-        display: inline-flex;
-        min-height: 38px;
-        padding-inline: 11px;
-        font-size: 11px;
     }
     .settings summary {
         width: 40px;

@@ -26,7 +26,6 @@
 {% elif name == 'settings' %}<path d="M4 7h6m4 0h6M4 17h10m4 0h2"/><circle cx="12" cy="7" r="2"/><circle cx="16" cy="17" r="2"/>
 {% elif name == 'spark' %}<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/>
 {% elif name == 'library' %}<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
-{% elif name == 'shield' %}<path d="m12 3 8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6l8-3Z"/><path d="m8.5 12 2.3 2.3 4.7-5"/>
 {% elif name == 'chevron' %}<path d="m8 10 4 4 4-4"/>
 {% endif %}</svg>
 {%- endmacro %}
@@ -39,11 +38,9 @@
             </a>
             <nav class="main-nav" aria-label="主导航">
                 <a class="nav-link active" href="#library">{{ icon('library') }}图纸库</a>
-                <a class="nav-link" href="/completeness">{{ icon('shield') }}齐套性检查</a>
                 <a class="nav-link" href="#assistant">{{ icon('spark') }}图纸问答</a>
             </nav>
             <div class="topbar-actions">
-                <a class="button button-secondary mobile-check-link" href="/completeness">齐套检查</a>
                 <span class="connection-status"><span class="status-dot"></span>工作台在线</span>
                 <details class="settings" id="model-settings">
                     <summary class="button button-secondary">{{ icon('settings') }}<span>处理设置</span>{{ icon('chevron') }}</summary>

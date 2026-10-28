@@ -24,36 +24,6 @@ def page_count(path: Path) -> int:
         return getattr(image, "n_frames", 1)
 
 
-def load_page(path: Path, page_number: int, dpi: int = 140) -> Image.Image:
-    """Render one 1-based page/frame without loading the whole document."""
-    if page_number < 1:
-        raise ValueError("页码必须从 1 开始")
-    if path.suffix.lower() in RASTER_SUFFIXES:
-        with Image.open(path) as image:
-            for index, frame in enumerate(ImageSequence.Iterator(image), 1):
-                if index == page_number:
-                    return rgb_page(frame)
-        raise ValueError("页码超出图片页数")
-    if path.suffix.lower() != ".pdf":
-        raise ValueError("不支持的文件类型")
-
-    document = pdfium.PdfDocument(path)
-    try:
-        if page_number > len(document):
-            raise ValueError("页码超出 PDF 页数")
-        page = document[page_number - 1]
-        try:
-            bitmap = page.render(scale=dpi / 72)
-            try:
-                return bitmap.to_pil().convert("RGB")
-            finally:
-                bitmap.close()
-        finally:
-            page.close()
-    finally:
-        document.close()
-
-
 def load_pages(path: Path, dpi: int, limit: int | None = None) -> list[Image.Image]:
     if path.suffix.lower() in RASTER_SUFFIXES:
         with Image.open(path) as image:
