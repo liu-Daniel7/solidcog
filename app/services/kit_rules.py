@@ -21,6 +21,7 @@ from typing import Iterable
 DRAWING_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp", ".webp"}
 MODEL_SUFFIXES = {".sldprt", ".sldasm"}
 NATIVE_DRAWING_SUFFIXES = {".slddrw", ".dwg", ".dxf"}
+_KNOWN_SUFFIXES = DRAWING_SUFFIXES | MODEL_SUFFIXES | NATIVE_DRAWING_SUFFIXES
 
 CHECK_SCOPE_NOTE = (
     "本次仅核对当前导入集合中的 PDF / PNG / JPG / TIFF / BMP / WebP 工程图；"
@@ -30,13 +31,29 @@ CHECK_SCOPE_NOTE = (
 _CODE_VALUE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._/-]{2,39}$")
 
 
+def strip_code_boundary(value: object) -> str:
+    """Canonicalise a code before validation/comparison.
+
+    OCR tables and filenames often surround a code with punctuation, a trailing
+    separator, or the file suffix.  Remove those boundary artifacts once, but
+    keep internal dots, leading zeroes and separators.
+    """
+    text = clean_text(value).strip(_BOUNDARY_PUNCTUATION)
+    lowered = text.lower()
+    for suffix in sorted(_KNOWN_SUFFIXES, key=len, reverse=True):
+        if lowered.endswith(suffix):
+            text = text[: -len(suffix)]
+            break
+    return text.strip(_BOUNDARY_PUNCTUATION).rstrip("._-/ ").strip()
+
+
 def is_valid_code(value: object) -> bool:
     """A code must be code-like, contain both a letter and a digit.
 
     This rejects OCR noise such as ``$$`` or ``SSS`` while allowing dotted,
     hyphenated and slash-separated drawing numbers.
     """
-    text = clean_text(value).strip(_BOUNDARY_PUNCTUATION)
+    text = strip_code_boundary(value)
     if not _CODE_VALUE.fullmatch(text):
         return False
     return bool(re.search(r"[A-Za-z]", text) and re.search(r"\d", text))
@@ -74,7 +91,7 @@ def normalize_code(value: object) -> str:
     characters are preserved, but OCR/table boundary punctuation around a code
     is removed consistently for validation and filename matching.
     """
-    return clean_text(value).strip(_BOUNDARY_PUNCTUATION).upper()
+    return strip_code_boundary(value).upper()
 
 
 def normalize_name(value: object) -> str:
@@ -260,6 +277,7 @@ def classify_note(note: object) -> dict:
             break
         normalized = changed
     normalized = _strip_wrappers(normalized)
+    normalized = re.sub(r"[。；;，,、/|\s]+$", "", normalized).strip()
 
     if normalized in _EXEMPT_SET:
         return {"exempt": True, "reason": normalized, "review": False, "normalized": normalized}

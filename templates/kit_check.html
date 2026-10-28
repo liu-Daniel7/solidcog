@@ -325,6 +325,9 @@
             if (summary.issue_drawings) notes.push('异常图纸 ' + summary.issue_drawings);
             if (summary.no_table_drawings) notes.push('无明细表图纸 ' + summary.no_table_drawings);
             if (summary.missing_selected_files) notes.push('检查集合缺失 ' + summary.missing_selected_files + ' 张');
+            if (summary.missing_files) notes.push('原始文件缺失 ' + summary.missing_files + ' 张');
+            if (summary.unprocessed_selected_drawings) notes.push('未处理图纸 ' + summary.unprocessed_selected_drawings + ' 张');
+            if (summary.empty_processed_drawings) notes.push('空结果图纸 ' + summary.empty_processed_drawings + ' 张');
             const context = [];
             context.push('<span class="context-chip">' + escapeHtml(payload.mode_label) + '</span>');
             context.push('<span class="context-chip">检查集合 ' + escapeHtml(summary.selected_files) + ' 个文件</span>');
@@ -567,6 +570,7 @@
             renderGroups(payload);
             el('kit-results').hidden = false;
             el('retry-check').disabled = !payload.can_retry;
+            el('retry-check').title = payload.can_retry ? '重新识别失败或部分页图纸' : (payload.retry_blocked_reason || '');
         }
 
         function renderProgress(payload) {

@@ -42,6 +42,11 @@ class FilenameMatchingTests(unittest.TestCase):
         self.assertEqual(normalize_code("SK.CNC.0003."), "SK.CNC.0003")
         self.assertTrue(is_valid_code("（SK.CNC.0003）"))
 
+    def test_code_file_suffix_and_trailing_separator_are_normalized(self):
+        for code in ("SK.CNC.0003-", "SK.CNC.0003_", "SK.CNC.0003.pdf"):
+            result = match_files(code, "外框", [file(1, "SK.CNC.0003-外框.pdf")])
+            self.assertEqual(result["status"], "exists", code)
+
     def test_boundary_not_substring(self):
         result = match_files("SK.CNC.0003", "外框", [file(1, "SK.CNC.00030-外框.pdf")])
         self.assertEqual(result["status"], "missing")
@@ -135,6 +140,10 @@ class NoteClassificationTests(unittest.TestCase):
         result = classify_note("")
         self.assertFalse(result["exempt"])
         self.assertFalse(result["review"])
+
+    def test_trailing_sentence_punctuation_is_exempt(self):
+        for note in ("标准件。", "标准件；", "标准件、", "无图。", "备注：标准件。"):
+            self.assertTrue(classify_note(note)["exempt"], note)
 
     def test_ordinary_note_is_checked_without_noise(self):
         result = classify_note("表面发黑")

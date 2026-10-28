@@ -1,6 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from PIL import Image
@@ -207,6 +208,59 @@ class BomExtractionTests(unittest.TestCase):
             self.drawing["all_text"] = "新的OCR文本"
             bom_extraction.extract_drawing(self.drawing)
         self.assertEqual(extract.call_count, 2)
+
+    def test_title_code_removes_text_suffix(self):
+        self.drawing["title_text"] = "图号：SK.CNC.0003.pdf"
+        self.assertEqual(bom_extraction._derive_title_code(self.drawing), "SK.CNC.0003")
+
+    def test_truncated_qwen_response_is_rejected(self):
+        from app.services import qwen
+        completion = SimpleNamespace(
+            choices=[SimpleNamespace(
+                message=SimpleNamespace(content='{"has_table": true, "rows": []}'),
+                finish_reason="length",
+            )]
+        )
+        client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(create=lambda **kwargs: completion)))
+        with patch.object(qwen, "_client", return_value=client):
+            with self.assertRaises(RuntimeError):
+                qwen.extract_bom_page(Image.new("RGB", (20, 20), "white"))
+
+    def test_fallback_parser_splits_single_space_name_and_quantity(self):
+        rows = bom_extraction._parse_table_lines(
+            ["明细表 序号 代号 名称 备注 数量", "1 SK.CNC.0003 外框 2"],
+            1,
+            "ocr_text",
+        )
+        self.assertEqual(rows[0]["name"], "外框")
+        self.assertEqual(rows[0]["quantity"], "2")
+        self.assertTrue(rows[0]["issues"])
+
+    def test_contradictory_has_table_false_with_rows_is_not_ok(self):
+        table = model_table([model_row("SK.CNC.0003", "外框")], has_table=False)
+        with patch.object(bom_extraction, "qwen_configured", return_value=True), \
+             patch.object(bom_extraction.qwen, "extract_bom_page", return_value=table):
+            result = bom_extraction.extract_drawing(self.drawing)
+        self.assertEqual(result["status"], "partial")
+        self.assertTrue(any("矛盾" in issue for issue in result["issues"]))
+
+    def test_non_dict_model_row_is_reported(self):
+        table = model_table([model_row("SK.CNC.0003", "外框"), "junk"])
+        with patch.object(bom_extraction, "qwen_configured", return_value=True), \
+             patch.object(bom_extraction.qwen, "extract_bom_page", return_value=table):
+            result = bom_extraction.extract_drawing(self.drawing)
+        self.assertEqual(result["status"], "partial")
+        self.assertTrue(any("格式无效" in issue for issue in result["issues"]))
+
+    def test_vision_part_table_is_not_overridden_by_ocr_rows(self):
+        table = model_table([model_row("M20", "螺栓", seq="1")])
+        table["table_kind"] = "part_table"
+        self.drawing["all_text"] = "第 1 页\n明细表 序号 代号 名称\n1 SK.CNC.0003 外框 2"
+        with patch.object(bom_extraction, "qwen_configured", return_value=True), \
+             patch.object(bom_extraction.qwen, "extract_bom_page", return_value=table):
+            result = bom_extraction.extract_drawing(self.drawing)
+        self.assertEqual(result["status"], "no_table")
+        self.assertEqual(result["rows"], [])
 
     def test_title_code_removes_filename_extension_and_separator(self):
         self.drawing["title_text"] = ""

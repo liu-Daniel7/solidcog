@@ -142,6 +142,7 @@ def delete(drawing_id: int) -> None:
     (config.UPLOAD_DIR / drawing["filename"]).unlink(missing_ok=True)
     translations_repository.delete_for_drawing(drawing_id)
     kit_repository.delete_extraction(drawing_id)
+    kit_repository.delete_for_drawing(drawing_id)
     repository.delete(drawing_id)
 
 
@@ -149,5 +150,6 @@ def delete_all() -> None:
     filenames = repository.delete_all()
     translations_repository.delete_all()
     kit_repository.delete_all_extractions()
+    kit_repository.delete_all_check_results()
     for filename in filenames:
         (config.UPLOAD_DIR / filename).unlink(missing_ok=True)

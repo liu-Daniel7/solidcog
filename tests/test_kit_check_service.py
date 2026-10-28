@@ -53,6 +53,8 @@ class KitCheckServiceTests(unittest.TestCase):
         from app.database import init_database
         init_database()
         self.root = root
+        self.upload = root / "uploads"
+        self.upload.mkdir(parents=True, exist_ok=True)
         self.ids = {}
         self._create("SK.CNC.0001-SK数控铣床.pdf", "SK.CNC.0001", "SK数控铣床")
         self._create("SK.CNC.0002-工作台框.pdf", "SK.CNC.0002", "工作台框")
@@ -83,8 +85,10 @@ class KitCheckServiceTests(unittest.TestCase):
         self.temp.cleanup()
 
     def _create(self, filename, code, title):
+        stored = f"20261028100000_000001_{filename}"
+        (self.upload / stored).write_bytes(b"%PDF-1.4\n")
         drawing_id = drawings.create({
-            "filename": f"20261028100000_000001_{filename}",
+            "filename": stored,
             "original_filename": filename,
             "file_type": Path(filename).suffix,
             "file_size": 100,
@@ -160,6 +164,7 @@ class KitCheckServiceTests(unittest.TestCase):
         ], code="SK.CNC.0001", name="SK数控铣床")
         # Replace the selected exact file with a same-code/different-name file.
         self.extractions[self.ids["SK.CNC.0003"]] = extraction(status="no_table")
+        (self.upload / "20261028100000_000002_SK.CNC.0003-内框.pdf").write_bytes(b"%PDF-1.4\n")
         drawings.create({
             "filename": "20261028100000_000002_SK.CNC.0003-内框.pdf",
             "original_filename": "SK.CNC.0003-内框.pdf",
@@ -248,7 +253,7 @@ class KitCheckServiceTests(unittest.TestCase):
             "all_text": "",
             "layout": "unknown",
         })
-        payload = self._run([self.ids["SK.CNC.0001"], 6], mode="manual", roots=[self.ids["SK.CNC.0001"]])
+        payload = self._run([self.ids["SK.CNC.0001"]], mode="manual", roots=[self.ids["SK.CNC.0001"]])
         item = next(item for group in payload["groups"] for item in group["items"] if item["code"] == "SK.CNC.0007")
         self.assertEqual(item["match_status"], "missing")
 
@@ -316,6 +321,64 @@ class KitCheckServiceTests(unittest.TestCase):
         self.assertFalse(updated["summary"]["all_present"])
         self.assertGreaterEqual(updated["summary"]["missing_selected_files"], 1)
         self.assertTrue(any(issue.get("status") == "missing" for issue in updated["drawing_issues"]))
+
+    def test_ok_extraction_without_rows_is_not_a_complete_group(self):
+        self.extractions[self.ids["SK.CNC.0001"]] = extraction([], status="ok")
+        payload = self._run([self.ids["SK.CNC.0001"]])
+        self.assertEqual(payload["summary"]["assemblies"], 0)
+        self.assertFalse(payload["summary"]["complete"])
+        self.assertTrue(any(issue.get("status") == "failed" for issue in payload["drawing_issues"]))
+
+    def test_selected_drawings_without_check_rows_are_not_complete(self):
+        check = service.create_check([self.ids["SK.CNC.0001"], self.ids["SK.CNC.0002"]], mode="all", start=False)
+        kit_checks.update(check["id"], status="completed")
+        payload = service.build_payload(check["id"])
+        self.assertFalse(payload["summary"]["complete"])
+        self.assertEqual(payload["summary"]["unprocessed_selected_drawings"], 2)
+        self.assertFalse(payload["summary"]["all_present"])
+
+    def test_missing_physical_file_invalidates_complete_result(self):
+        self.extractions[self.ids["SK.CNC.0001"]] = extraction([
+            row("SK.CNC.0002", "工作台框"),
+            row("SK.CNC.0003", "外框"),
+        ], code="SK.CNC.0001", name="SK数控铣床")
+        self.extractions[self.ids["SK.CNC.0002"]] = extraction([
+            row("SK.CNC.0003", "外框"),
+        ], code="SK.CNC.0002", name="工作台框")
+        payload = self._run([self.ids["SK.CNC.0001"], self.ids["SK.CNC.0002"], self.ids["SK.CNC.0003"]])
+        self.assertTrue(payload["summary"]["all_present"])
+        path = next(self.upload.glob("*SK.CNC.0002-工作台框.pdf"))
+        path.unlink()
+        updated = service.build_payload(payload["id"])
+        self.assertFalse(updated["summary"]["complete"])
+        self.assertFalse(updated["summary"]["all_present"])
+        self.assertEqual(updated["summary"]["missing_files"], 1)
+        self.assertTrue(any(issue.get("status") == "file_missing" for issue in updated["drawing_issues"]))
+
+    def test_retry_completed_without_failures_is_blocked(self):
+        payload = self._run([self.ids["SK.CNC.0001"], self.ids["SK.CNC.0002"]])
+        with self.assertRaises(Exception):
+            service.retry_check(payload["id"])
+
+    def test_retry_with_manual_edits_is_blocked(self):
+        self.extractions[self.ids["SK.CNC.0001"]] = extraction([
+            row("", "无代号", "标准件"),
+        ], status="failed", issues=["代号无法识别"])
+        payload = self._run([self.ids["SK.CNC.0001"]], mode="manual", roots=[self.ids["SK.CNC.0001"]])
+        item = payload["groups"][0]["items"][0]
+        service.update_item(item["id"], {"code": "SK.CNC.0002", "name": "工作台框", "note": "", "quantity": "1"})
+        with self.assertRaises(Exception):
+            service.retry_check(payload["id"])
+
+    def test_csv_includes_issues_and_escapes_formula_cells(self):
+        self.extractions[self.ids["SK.CNC.0001"]] = extraction([
+            row("", "无代号", "=1+1"),
+        ], status="failed", issues=["表格无法辨认"])
+        payload = self._run([self.ids["SK.CNC.0001"]], mode="manual", roots=[self.ids["SK.CNC.0001"]])
+        text = service.export_csv(payload["id"])
+        self.assertIn("【检查汇总】", text)
+        self.assertIn("【图纸问题】", text)
+        self.assertIn("'=1+1", text)
 
     def test_csv_has_bom_and_chinese_headers(self):
         payload = self._run([self.ids["SK.CNC.0001"], self.ids["SK.CNC.0002"]])

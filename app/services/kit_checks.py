@@ -24,6 +24,7 @@ from app.repositories import kit_checks as repository
 from app.services import bom_extraction, segments
 from app.services.kit_rules import (
     CHECK_SCOPE_NOTE,
+    DRAWING_SUFFIXES,
     DrawingFile,
     classify_note,
     is_valid_code,
@@ -58,6 +59,17 @@ def _now() -> str:
 
 def _join_issue(*parts: object) -> str:
     return "；".join(str(part).strip() for part in parts if str(part or "").strip())
+
+
+def _csv_safe(value: object) -> str:
+    text = str(value if value is not None else "")
+    if text.lstrip().startswith(("=", "+", "-", "@", "\t", "\r")):
+        return "'" + text
+    return text
+
+
+def _csv_row(values: list[object]) -> list[str]:
+    return [_csv_safe(value) for value in values]
 
 
 def _drawing_file(row: dict) -> DrawingFile:
@@ -169,6 +181,12 @@ def _record_drawing(
         )
     extraction_status = str(extraction.get("status") or "failed")
     status = "processed" if extraction_status == "ok" else extraction_status
+    issues = list(extraction.get("issues") or [])
+    if extraction_status == "ok" and not extraction.get("rows"):
+        # A processed drawing without any row is not a valid completed group.
+        # Treat it as an extraction failure instead of silently omitting it.
+        status = "failed"
+        issues.append("提取标记成功但没有明细表行，未形成检查结果")
     repository.update_drawing_fields(
         check_id,
         drawing_id,
@@ -177,7 +195,7 @@ def _record_drawing(
         pages_processed=int(extraction.get("pages_processed") or 0),
         table_code=str(extraction.get("table_code") or ""),
         table_name=str(extraction.get("table_name") or ""),
-        issues_json=json.dumps(extraction.get("issues") or [], ensure_ascii=False),
+        issues_json=json.dumps(issues, ensure_ascii=False),
         finished_at=_now(),
     )
     if parent_item_id:
@@ -225,9 +243,16 @@ def create_check(drawing_ids: list[int], mode: str = "all", root_ids: list[int] 
         if drawing_id not in roots:
             roots.append(drawing_id)
     _validate_check_input(unique_ids, mode, roots)
-    missing = [drawing_id for drawing_id in unique_ids if not drawings_repository.get(drawing_id)]
+    selected_rows = {drawing_id: drawings_repository.get(drawing_id) for drawing_id in unique_ids}
+    missing = [drawing_id for drawing_id, row in selected_rows.items() if not row]
     if missing:
         raise HTTPException(400, f"本次检查集合中有图纸已被删除：{', '.join(map(str, missing))}")
+    unsupported = [
+        drawing_id for drawing_id, row in selected_rows.items()
+        if row and str(row.get("file_type") or "").lower() not in DRAWING_SUFFIXES
+    ]
+    if unsupported:
+        raise HTTPException(400, "以下文件不是可检查的工程图（PDF/PNG/JPG/TIFF/BMP/WebP）：" + ", ".join(map(str, unsupported)))
     check_id = repository.create(mode, unique_ids, roots)
     if start:
         submit(check_id)
@@ -288,6 +313,16 @@ def run_check(check_id: int, force_drawing_ids: list[int] | None = None) -> None
                     "pages_total": 0,
                     "pages_processed": 0,
                     "issues": ["图纸不在本次导入集合中，已跳过"],
+                    "table_code": "",
+                    "table_name": "",
+                }
+            elif str(row.get("file_type") or "").lower() not in DRAWING_SUFFIXES:
+                extractions[drawing_id] = {
+                    "status": "no_table",
+                    "rows": [],
+                    "pages_total": 0,
+                    "pages_processed": 0,
+                    "issues": ["非工程图文件，不参与本次检查"],
                     "table_code": "",
                     "table_name": "",
                 }
@@ -504,6 +539,8 @@ def _summary(
     check_drawings: list[dict],
     check: dict,
     missing_selected: int = 0,
+    missing_files: int = 0,
+    unprocessed_selected: int = 0,
 ) -> dict:
     non_exempt = [item for item in items if not item.get("exempt_reason")]
     exists = sum(1 for item in non_exempt if item.get("match_status") == "exists")
@@ -515,12 +552,23 @@ def _summary(
         1 for item in non_exempt
         if item.get("extraction_status") != "ok" or item.get("match_status") in {"candidate", "unchecked"}
     )
+    group_ids = {int(group.get("drawing_id") or 0) for group in groups}
+    empty_processed = [
+        row for row in check_drawings
+        if row.get("status") == "processed" and int(row["drawing_id"]) not in group_ids
+    ]
     issue_drawings = [
         row for row in check_drawings
         if row.get("status") in {"failed", "partial"}
-    ]
+    ] + empty_processed
     no_table = [row for row in check_drawings if row.get("status") == "no_table"]
-    complete = str(check.get("status")) == "completed" and missing_selected == 0
+    complete = (
+        str(check.get("status")) == "completed"
+        and missing_selected == 0
+        and missing_files == 0
+        and unprocessed_selected == 0
+        and not empty_processed
+    )
     all_present = bool(
         complete
         and groups
@@ -541,8 +589,11 @@ def _summary(
         "review_items": review_items,
         "issue_drawings": len(issue_drawings),
         "no_table_drawings": len(no_table),
-        "review_total": review_items + len(issue_drawings) + missing_selected,
+        "review_total": review_items + len(issue_drawings) + missing_selected + missing_files + unprocessed_selected,
         "missing_selected_files": missing_selected,
+        "missing_files": missing_files,
+        "unprocessed_selected_drawings": unprocessed_selected,
+        "empty_processed_drawings": len(empty_processed),
         "complete": complete,
         "all_present": all_present,
     }
@@ -576,12 +627,27 @@ def build_payload(check_id: int) -> dict:
     all_items = repository.list_items(check_id)
     drawing_cache: dict[int, dict | None] = {}
     missing_selected: list[int] = []
-    for drawing_id in check.get("drawing_ids") or []:
-        drawing_id = int(drawing_id)
+    missing_files: list[dict] = []
+    relevant_ids = [int(item) for item in check.get("drawing_ids") or []]
+    if str(check.get("mode")) == "manual":
+        relevant_set = {int(item) for item in check.get("root_drawing_ids") or []}
+        relevant_set.update(int(row["drawing_id"]) for row in check_drawings)
+        relevant_ids = [drawing_id for drawing_id in relevant_ids if drawing_id in relevant_set]
+    for drawing_id in relevant_ids:
         drawing = drawings_repository.get(drawing_id)
-        drawing_cache[drawing_id] = drawing
         if not drawing:
             missing_selected.append(drawing_id)
+            drawing_cache[drawing_id] = None
+        elif not (config.UPLOAD_DIR / str(drawing.get("filename") or "")).exists():
+            missing_files.append(drawing)
+            drawing_cache[drawing_id] = None
+        else:
+            drawing_cache[drawing_id] = drawing
+    check_drawing_ids = {int(row["drawing_id"]) for row in check_drawings}
+    unprocessed_selected = [
+        drawing_id for drawing_id in (check.get("drawing_ids") or [])
+        if int(drawing_id) not in check_drawing_ids
+    ] if str(check.get("mode")) == "all" and str(check.get("status")) not in {"queued", "running"} else []
     visible_items = [
         item for item in all_items
         if drawing_cache.get(int(item["drawing_id"]))
@@ -649,17 +715,40 @@ def build_payload(check_id: int) -> dict:
             },
         })
 
-    summary = _summary(visible_items, groups, check_drawings, check, missing_selected=len(missing_selected))
+    summary = _summary(
+        visible_items,
+        groups,
+        check_drawings,
+        check,
+        missing_selected=len(missing_selected),
+        missing_files=len(missing_files),
+        unprocessed_selected=len(unprocessed_selected),
+    )
     drawing_issues = []
+    issues_by_id: dict[int, dict] = {}
+
+    def add_drawing_issue(issue: dict) -> None:
+        drawing_id = int(issue["drawing_id"])
+        existing = issues_by_id.get(drawing_id)
+        if existing:
+            existing["issues"] = list(dict.fromkeys([*(existing.get("issues") or []), *(issue.get("issues") or [])]))
+            return
+        issues_by_id[drawing_id] = issue
+        drawing_issues.append(issue)
+
     for row in check_drawings:
         if row.get("status") in {"failed", "partial"} or (
             row.get("status") == "no_table" and int(row["drawing_id"]) in (check.get("root_drawing_ids") or [])
+        ) or (
+            row.get("status") == "processed" and not items_by_drawing.get(int(row["drawing_id"]))
         ):
-            drawing = drawings_repository.get(int(row["drawing_id"]))
-            drawing_issues.append({
+            drawing = drawing_cache.get(int(row["drawing_id"]))
+            if not drawing:
+                continue
+            add_drawing_issue({
                 "drawing_id": row["drawing_id"],
-                "original_filename": drawings_repository.display_filename(drawing) if drawing else "",
-                "title": row.get("table_name") or (_drawing_title(drawing) if drawing else ""),
+                "original_filename": drawings_repository.display_filename(drawing),
+                "title": row.get("table_name") or _drawing_title(drawing),
                 "status": row.get("status"),
                 "status_label": DRAWING_STATUS_LABELS.get(str(row.get("status")), str(row.get("status"))),
                 "issues": row.get("issues") or [],
@@ -667,8 +756,32 @@ def build_payload(check_id: int) -> dict:
                 "pages_processed": int(row.get("pages_processed") or 0),
                 "is_root": int(row["drawing_id"]) in (check.get("root_drawing_ids") or []),
             })
+    for drawing in missing_files:
+        add_drawing_issue({
+            "drawing_id": int(drawing["id"]),
+            "original_filename": drawings_repository.display_filename(drawing),
+            "title": _drawing_title(drawing),
+            "status": "file_missing",
+            "status_label": "原始图纸文件缺失",
+            "issues": ["图纸库记录存在，但原始文件已不在上传目录，不能沿用旧结果宣称齐全"],
+            "pages_total": int(drawing.get("page_count") or 0),
+            "pages_processed": int(drawing.get("pages_processed") or 0),
+            "is_root": int(drawing["id"]) in (check.get("root_drawing_ids") or []),
+        })
+    for drawing_id in unprocessed_selected:
+        add_drawing_issue({
+            "drawing_id": int(drawing_id),
+            "original_filename": "",
+            "title": f"图纸 #{drawing_id}",
+            "status": "unprocessed",
+            "status_label": "本次检查未处理",
+            "issues": ["该图纸属于本次检查集合，但没有生成检查结果，不能宣称齐全"],
+            "pages_total": 0,
+            "pages_processed": 0,
+            "is_root": int(drawing_id) in (check.get("root_drawing_ids") or []),
+        })
     for drawing_id in missing_selected:
-        drawing_issues.append({
+        add_drawing_issue({
             "drawing_id": drawing_id,
             "original_filename": "",
             "title": f"图纸 #{drawing_id}",
@@ -687,7 +800,18 @@ def build_payload(check_id: int) -> dict:
         "groups": groups,
         "drawing_issues": drawing_issues,
         "scope_note": CHECK_SCOPE_NOTE,
-        "can_retry": str(check.get("status")) in {"completed", "partial", "failed"},
+        "can_retry": bool(
+            str(check.get("status")) in {"completed", "partial", "failed"}
+            and any(row.get("status") in {"failed", "partial"} for row in check_drawings)
+            and not any(bool(item.get("edited")) for item in all_items)
+        ),
+        "retry_blocked_reason": (
+            ""
+            if any(row.get("status") in {"failed", "partial"} for row in check_drawings)
+            and not any(bool(item.get("edited")) for item in all_items)
+            else ("存在人工修正，重试会覆盖修正" if any(bool(item.get("edited")) for item in all_items)
+                  else "没有失败或部分页图纸需要重试")
+        ),
     }
 
 
@@ -702,6 +826,10 @@ def retry_check(check_id: int) -> dict:
         for row in repository.list_drawings(check_id)
         if row.get("status") in {"failed", "partial"}
     ]
+    if not failed_ids:
+        raise HTTPException(409, "没有失败或部分页的图纸，无需重试")
+    if any(bool(item.get("edited")) for item in repository.list_items(check_id)):
+        raise HTTPException(409, "检查中存在人工修正，重试会覆盖修正；请先导出 CSV 或新建检查")
     repository.update(check_id, status="queued", current_step="等待重试", error=None, finished_at=None)
     submit(check_id, force_drawing_ids=failed_ids)
     return get_check_summary(check_id)
@@ -776,11 +904,20 @@ def export_csv(check_id: int) -> str:
     payload = build_payload(check_id)
     output = io.StringIO(newline="")
     writer = csv.writer(output, lineterminator="\r\n")
-    writer.writerow([
+    writer.writerow(_csv_row([
         "检查模式", "检查集合文件数", "所属装配图", "装配图文件", "装配图代号",
         "页码", "序号", "代号", "名称", "备注", "数量", "匹配文件",
         "检查结果", "提取状态", "问题说明", "引用来源",
-    ])
+    ]))
+    summary = payload["summary"]
+    writer.writerow(_csv_row([
+        payload.get("mode_label"), summary.get("selected_files"), "【检查汇总】",
+        "", "", "", "", "", "", "", "",
+        f"存在 {summary.get('exists', 0)}；不存在 {summary.get('missing', 0)}；免查 {summary.get('exempt', 0)}；待复核 {summary.get('review_total', 0)}",
+        "整套齐全" if summary.get("all_present") else "未完成/需处理",
+        "", f"检查状态：{payload.get('status_label', '')}",
+        "",
+    ]))
     for group in payload["groups"]:
         reference_text = "；".join(
             f"{reference.get('source_drawing')} / {reference.get('code')} {reference.get('name')}"
@@ -796,7 +933,7 @@ def export_csv(check_id: int) -> str:
             issue_parts = [item.get("extraction_issue") or "", item.get("match_reason") or ""]
             if candidates:
                 issue_parts.append(f"候选文件（名称不一致）：{candidates}")
-            writer.writerow([
+            writer.writerow(_csv_row([
                 payload.get("mode_label"),
                 payload["summary"].get("selected_files"),
                 group.get("title"),
@@ -813,5 +950,24 @@ def export_csv(check_id: int) -> str:
                 item.get("extraction_status_label") or "",
                 "；".join(part for part in issue_parts if part),
                 reference_text,
-            ])
+            ]))
+    for issue in payload.get("drawing_issues") or []:
+        writer.writerow(_csv_row([
+            payload.get("mode_label"),
+            payload["summary"].get("selected_files"),
+            issue.get("title") or "图纸问题",
+            issue.get("original_filename") or "",
+            "",
+            "",
+            "",
+            "",
+            "【图纸问题】",
+            "",
+            "",
+            "",
+            issue.get("status_label") or "",
+            "",
+            "；".join(str(part) for part in issue.get("issues") or [] if part),
+            "",
+        ]))
     return "\ufeff" + output.getvalue()
