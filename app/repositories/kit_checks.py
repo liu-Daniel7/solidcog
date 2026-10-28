@@ -387,3 +387,22 @@ def delete_all_extractions() -> None:
     with closing(connect()) as connection:
         with connection:
             connection.execute("DELETE FROM kit_extractions")
+
+
+def delete_for_drawing(drawing_id: int) -> None:
+    """Remove live check rows for a deleted drawing.
+
+    Historical check summaries remain queryable, but their missing-selected
+    reconciliation will mark them incomplete instead of counting stale items.
+    """
+    with closing(connect()) as connection:
+        with connection:
+            connection.execute("DELETE FROM kit_check_items WHERE drawing_id=?", (drawing_id,))
+            connection.execute("DELETE FROM kit_check_drawings WHERE drawing_id=?", (drawing_id,))
+
+
+def delete_all_check_results() -> None:
+    with closing(connect()) as connection:
+        with connection:
+            connection.execute("DELETE FROM kit_check_items")
+            connection.execute("DELETE FROM kit_check_drawings")

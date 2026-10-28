@@ -30,6 +30,7 @@ from app.services.kit_rules import (
     is_valid_code,
     normalize_code,
     split_filename,
+    strip_code_boundary,
 )
 
 LOGGER = logging.getLogger(__name__)
@@ -101,9 +102,9 @@ def _extract_code_from_text(text: str) -> str:
     for line in str(text or "").splitlines():
         match = _CODE_LABEL.search(line)
         if match and _valid_code_token(match.group(1)):
-            return clean_text(match.group(1)).rstrip("._-/ ")
+            return strip_code_boundary(match.group(1))
     match = _find_code_token(str(text or ""))
-    return clean_text(match.group(1)).rstrip("._-/ ") if match else ""
+    return strip_code_boundary(match.group(1)) if match else ""
 
 
 def _filename_stem(filename: str) -> str:
@@ -125,9 +126,9 @@ def _derive_title_code(drawing: dict, model_code: str = "") -> str:
     if match:
         # The token regex allows trailing separators; they are not part of the
         # drawing's own code.
-        return clean_text(match.group(1)).rstrip("._-/ ")
+        return strip_code_boundary(match.group(1))
     if _valid_code_token(model_code):
-        return clean_text(model_code)
+        return strip_code_boundary(model_code)
     return ""
 
 
@@ -281,6 +282,11 @@ def _parse_table_lines(lines: list[str], page_number: int, source: str) -> list[
         before = cleaned[:match.start()].strip()
         after = cleaned[match.end():].strip()
         tokens = [token.strip() for token in re.split(r"\t+|\s{2,}|\s*\|\s*", after) if token.strip()]
+        if len(tokens) == 1:
+            # The PDF text layer often preserves normal single spaces rather
+            # than cell separators. Split a single cell into words so a trailing
+            # quantity does not become part of the name.
+            tokens = tokens[0].split()
         sequence = ""
         sequence_match = re.search(r"(\d{1,4})\s*$", before)
         if sequence_match:
@@ -430,9 +436,12 @@ def _model_rows(
         if not isinstance(page_rows, list):
             issues.append(f"第 {page_number} 页 rows 不是数组")
             continue
+        page_row_count = 0
         for row_index, raw_row in enumerate(page_rows, 1):
             if not isinstance(raw_row, dict):
+                issues.append(f"第 {page_number} 页第 {row_index} 行格式无效，已保留问题提示")
                 continue
+            page_row_count += 1
             row = {
                 "page_number": page_number,
                 "sequence_no": clean_text(raw_row.get("seq") or raw_row.get("序号")),
@@ -445,6 +454,12 @@ def _model_rows(
                 "issues": [],
             }
             rows.append(row)
+        if page_row_count and not has_table:
+            # A model that returns rows while claiming has_table=false is
+            # contradictory; keep the rows but force a reviewable partial
+            # result instead of reporting a clean table.
+            has_table = True
+            issues.append(f"第 {page_number} 页模型返回了明细表行但 has_table=false，内容存在矛盾")
     return rows, processed, issues, model_code, model_name, has_table
 
 
@@ -513,7 +528,16 @@ def _extract_uncached(drawing: dict) -> dict:
         if model_rows:
             source = "vision"
 
-    rows = model_rows or text_rows or ocr_rows
+    vision_verdict_available = bool(qwen_configured() and model_processed > 0)
+    if vision_verdict_available:
+        # If the focused vision pass actually ran, trust its explicit
+        # no-table/part-table verdict. Text-layer heuristics must not turn a
+        # part parameter table into a false assembly BOM.
+        rows = model_rows
+        issues = [*model_issues]
+    else:
+        rows = text_rows or ocr_rows
+        issues = [*text_issues, *ocr_issues, *model_issues]
     from_model = bool(model_rows)
     pages_processed = model_processed if qwen_configured() else max(text_processed, ocr_processed)
     if not qwen_configured():
@@ -522,8 +546,10 @@ def _extract_uncached(drawing: dict) -> dict:
         pages_processed = max(model_processed, text_processed)
     if not rows and not qwen_configured() and (text_rows or ocr_rows):
         pages_processed = max(text_processed, ocr_processed)
-    source = source or ("pdf_text" if text_rows else "ocr_text" if ocr_rows else "")
-    issues = [*text_issues, *ocr_issues, *model_issues]
+    if vision_verdict_available:
+        source = "vision" if model_rows else "vision_no_table"
+    else:
+        source = "pdf_text" if text_rows else "ocr_text" if ocr_rows else ""
     if not qwen_configured() and not rows:
         issues.append("未配置 Qwen 视觉模型，且 PDF 文字层/已有 OCR 未发现可用明细表")
     if rows and not from_model:

@@ -26,14 +26,18 @@ class KitCheckRouteTests(unittest.TestCase):
             item.start()
         from app.application import create_app
         self.client = TestClient(create_app())
+        self.upload = root / "uploads"
+        self.upload.mkdir(parents=True, exist_ok=True)
         self.ids = []
         for filename, code, title in (
             ("SK.CNC.0001-SK数控铣床.pdf", "SK.CNC.0001", "SK数控铣床"),
             ("SK.CNC.0002-工作台框.pdf", "SK.CNC.0002", "工作台框"),
             ("SK.CNC.0003-外框.pdf", "SK.CNC.0003", "外框"),
         ):
+            stored = f"20261028100000_000001_{filename}"
+            (self.upload / stored).write_bytes(b"%PDF-1.4\n")
             self.ids.append(drawings.create({
-                "filename": f"20261028100000_000001_{filename}",
+                "filename": stored,
                 "original_filename": filename,
                 "file_type": ".pdf",
                 "file_size": 10,
@@ -146,6 +150,18 @@ class KitCheckRouteTests(unittest.TestCase):
     def test_empty_selection_rejected(self):
         response = self.client.post("/kit-checks", json={"drawing_ids": [], "mode": "all"})
         self.assertEqual(response.status_code, 400)
+
+    def test_model_file_is_not_a_checkable_drawing(self):
+        model_id = drawings.create({
+            "filename": "model.sldprt", "original_filename": "SK.CNC.0007-立柱垫板.SLDPRT",
+            "file_type": ".sldprt", "file_size": 10, "upload_time": "2026-10-28 10:00:00",
+            "title_text": "", "tech_text": "", "all_text": "", "layout": "unknown",
+        })
+        response = self.client.post("/kit-checks", json={"drawing_ids": [model_id], "mode": "all"})
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("不是可检查的工程图", response.json()["detail"])
+        html = self.client.get("/kit-check").text
+        self.assertNotIn("立柱垫板.SLDPRT", html)
 
     def test_missing_drawing_rejected(self):
         response = self.client.post("/kit-checks", json={"drawing_ids": [9999], "mode": "all"})

@@ -266,10 +266,13 @@ def extract_bom_page(image: Image.Image, page_number: int = 1, filename_hint: st
                 {"type": "image_url", "image_url": {"url": _image_url(image)}},
             ],
         }],
-        max_tokens=3000,
+        max_tokens=4000,
         timeout=120,
     )
-    content = (completion.choices[0].message.content or "").strip()
+    choice = completion.choices[0]
+    content = (choice.message.content or "").strip()
+    if getattr(choice, "finish_reason", None) == "length":
+        raise RuntimeError("Qwen3-VL 明细表识别输出达到长度限制，结果可能不完整")
     if not content:
         raise RuntimeError("Qwen3-VL 明细表识别返回空结果")
     try:

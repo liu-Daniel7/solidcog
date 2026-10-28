@@ -10,6 +10,7 @@ from app.repositories import drawings as repository
 from app.repositories import kit_checks as kit_repository
 from app.services.drawings import template_rows
 from app.services.bom_extraction import drawing_title_name
+from app.services.kit_rules import DRAWING_SUFFIXES
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(config.TEMPLATE_DIR))
@@ -31,6 +32,8 @@ def kit_check_page(request: Request):
     rows = repository.list_all("DESC")
     drawings = []
     for row in rows:
+        if str(row.get("file_type") or "").lower() not in DRAWING_SUFFIXES:
+            continue
         drawings.append({
             "id": row["id"],
             "filename": row["filename"],
