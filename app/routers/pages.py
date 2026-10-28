@@ -7,7 +7,9 @@ from fastapi.templating import Jinja2Templates
 
 from app import config
 from app.repositories import drawings as repository
+from app.repositories import kit_checks as kit_repository
 from app.services.drawings import template_rows
+from app.services.bom_extraction import drawing_title_name
 
 router = APIRouter()
 templates = Jinja2Templates(directory=str(config.TEMPLATE_DIR))
@@ -22,6 +24,47 @@ def status():
 def home(request: Request):
     rows = template_rows(repository.list_all("DESC"))
     return templates.TemplateResponse(request, "index.html", {"图纸列表": rows, "drawings": rows})
+
+
+@router.get("/kit-check", response_class=HTMLResponse)
+def kit_check_page(request: Request):
+    rows = repository.list_all("DESC")
+    drawings = []
+    for row in rows:
+        drawings.append({
+            "id": row["id"],
+            "filename": row["filename"],
+            "original_filename": repository.display_filename(row),
+            "file_type": row["file_type"],
+            "file_size": row["file_size"],
+            "batch_id": row.get("batch_id") or "",
+            "upload_time": row["upload_time"],
+            "title": drawing_title_name(row),
+            "page_count": int(row.get("page_count") or 0),
+            "pages_processed": int(row.get("pages_processed") or 0),
+            "has_ocr": bool(str(row.get("all_text") or "").strip()),
+        })
+    recent_checks = []
+    for check in kit_repository.list_recent(8):
+        check = dict(check)
+        check["status_label"] = {
+            "queued": "排队中",
+            "running": "检查中",
+            "completed": "检查完成",
+            "partial": "部分完成",
+            "failed": "失败",
+        }.get(check.get("status"), check.get("status") or "")
+        check["mode_label"] = "全部装配图" if check.get("mode") == "all" else "手动总成图"
+        recent_checks.append(check)
+    default_batch_id = next(
+        (drawing["batch_id"] for drawing in sorted(drawings, key=lambda item: item["id"], reverse=True) if drawing.get("batch_id")),
+        "",
+    )
+    return templates.TemplateResponse(request, "kit_check.html", {
+        "drawings": drawings,
+        "recent_checks": recent_checks,
+        "default_batch_id": default_batch_id,
+    })
 
 
 @router.get("/about", response_class=HTMLResponse)

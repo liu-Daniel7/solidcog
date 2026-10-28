@@ -1,3 +1,4 @@
+import json
 import logging
 import shutil
 import threading
@@ -9,10 +10,11 @@ from PIL import Image
 
 from app import config
 from app.repositories import drawings as repository
+from app.repositories import kit_checks as kit_repository
 from app.repositories import translations as translations_repository
 from app.services import segments
 from app.services.ocr import run_ocr
-from app.services.images import RASTER_SUFFIXES
+from app.services.images import RASTER_SUFFIXES, page_count
 
 
 # OCR/model calls are expensive and share one local GPU/model scheduler.
@@ -45,7 +47,7 @@ def template_rows(rows: list[dict]) -> list[tuple]:
     ]
 
 
-def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
+def save_upload(file: UploadFile, ocr_backend: str = "qwen", batch_id: str | None = None) -> dict:
     original_name = file.filename or ""
     extension = Path(original_name).suffix.lower()
     if extension not in RASTER_SUFFIXES | {".pdf"}:
@@ -89,11 +91,28 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
             key: str(result.get(source, ""))
             for key, source in (("title_text", "title_block"), ("tech_text", "tech_block"), ("all_text", "all_text"), ("layout", "layout"))
         }
+        try:
+            total_pages = int(page_count(path))
+        except Exception:
+            total_pages = int(result.get("pages_total") or 0)
+        pages_processed = int(result.get("pages_processed") or 0)
+        if total_pages:
+            pages_processed = min(total_pages, pages_processed)
+        if not pages_processed and total_pages:
+            # Older OCR backends did not expose pages_processed. A non-empty
+            # single-page result is safe to treat as processed; multi-page
+            # results remain unknown and will be reported as partially checked.
+            pages_processed = 1 if total_pages == 1 and values["all_text"].strip() else 0
         drawing_id = repository.create({
             "filename": filename,
+            "original_filename": original_name,
+            "batch_id": batch_id or "",
             "file_type": extension,
             "file_size": size,
             "upload_time": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "page_count": total_pages,
+            "pages_processed": pages_processed,
+            "ocr_errors": json.dumps(result.get("page_errors") or [], ensure_ascii=False),
             **values,
         })
         try:
@@ -104,6 +123,7 @@ def save_upload(file: UploadFile, ocr_backend: str = "qwen") -> dict:
             "id": drawing_id,
             "filename": filename,
             "original_filename": original_name,
+            "batch_id": batch_id or "",
             "file_size": size,
             "ocr_backend": result.get("backend", ocr_backend),
             "page_errors": result.get("page_errors") or [],
@@ -121,11 +141,13 @@ def delete(drawing_id: int) -> None:
         raise HTTPException(404, "未找到该图纸")
     (config.UPLOAD_DIR / drawing["filename"]).unlink(missing_ok=True)
     translations_repository.delete_for_drawing(drawing_id)
+    kit_repository.delete_extraction(drawing_id)
     repository.delete(drawing_id)
 
 
 def delete_all() -> None:
     filenames = repository.delete_all()
     translations_repository.delete_all()
+    kit_repository.delete_all_extractions()
     for filename in filenames:
         (config.UPLOAD_DIR / filename).unlink(missing_ok=True)

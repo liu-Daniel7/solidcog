@@ -55,3 +55,6 @@ tmp/
 docs/business/
 docs/compliance/
 docs/third-party-licenses.md
+
+# Local customer/sample drawing batches (not part of the application code)
+/齐套性检查示例图纸/

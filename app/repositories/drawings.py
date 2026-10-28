@@ -1,9 +1,15 @@
+import re
 from contextlib import closing
+from pathlib import Path
 
 from app.database import connect
 
 
-FIELDS = "id, filename, file_type, file_size, upload_time, title_text, tech_text, layout, all_text"
+FIELDS = (
+    "id, filename, file_type, file_size, upload_time, title_text, tech_text, "
+    "layout, all_text, original_filename, batch_id, page_count, pages_processed, ocr_errors"
+)
+_STORED_NAME_PREFIX = re.compile(r"^\d{14}_\d{6}_")
 
 
 def _dict(row):
@@ -15,10 +21,48 @@ def _dict(row):
 CREATE_COLUMNS = (
     "filename", "file_type", "file_size", "upload_time",
     "title_text", "tech_text", "all_text", "layout",
+    "original_filename", "batch_id", "page_count", "pages_processed", "ocr_errors",
 )
+_OPTIONAL_DEFAULTS = {
+    "original_filename": None,
+    "batch_id": "",
+    "page_count": 0,
+    "pages_processed": 0,
+    "ocr_errors": None,
+}
+
+
+def display_filename(row: dict) -> str:
+    """Return the original upload name, with a best-effort legacy fallback.
+
+    Old rows only stored ``<timestamp>_<microseconds>_<sanitised name>``.  The
+    exact spaces are unrecoverable for those rows, but removing the storage
+    prefix is still better than showing a timestamped internal name.  New
+    uploads store ``original_filename`` verbatim.
+    """
+    if not row:
+        return ""
+    original = str(row.get("original_filename") or "").strip()
+    if original:
+        return original
+    stored = str(row.get("filename") or "")
+    stem = Path(stored).name
+    return _STORED_NAME_PREFIX.sub("", stem, count=1)
 
 
 def create(data: dict) -> int:
+    values = []
+    for key in CREATE_COLUMNS:
+        if key in data:
+            values.append(data[key])
+        elif key in _OPTIONAL_DEFAULTS:
+            values.append(_OPTIONAL_DEFAULTS[key])
+        else:
+            raise KeyError(key)
+    if not values[CREATE_COLUMNS.index("original_filename")]:
+        values[CREATE_COLUMNS.index("original_filename")] = _STORED_NAME_PREFIX.sub(
+            "", Path(str(data["filename"])).name, count=1
+        )
     with closing(connect()) as connection:
         with connection:
             cursor = connection.execute(
@@ -26,7 +70,7 @@ def create(data: dict) -> int:
                 INSERT INTO drawings ({", ".join(CREATE_COLUMNS)})
                 VALUES ({", ".join("?" for _ in CREATE_COLUMNS)})
                 """,
-                tuple(data[key] for key in CREATE_COLUMNS),
+                tuple(values),
             )
             return cursor.lastrowid
 
