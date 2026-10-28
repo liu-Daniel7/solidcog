@@ -112,6 +112,21 @@ def _parse_json(text: str) -> dict:
     }
 
 
+def _parse_raw_json_object(text: str) -> dict:
+    """Parse a model's JSON object without reducing it to OCR fields."""
+    cleaned = re.sub(r"^```(?:json)?\s*|\s*```$", "", text.strip(), flags=re.I)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        match = re.search(r"\{.*\}", cleaned, flags=re.S)
+        if not match:
+            raise
+        data = json.loads(match.group(0))
+    if not isinstance(data, dict):
+        raise ValueError("模型返回的 JSON 不是对象")
+    return data
+
+
 def _api_error(exc: Exception) -> RuntimeError:
     status = getattr(exc, "status_code", None)
     if status == 401:
@@ -198,3 +213,69 @@ def ocr_page(image: Image.Image, page_number: int) -> dict:
         result["warnings"] = [f"{view_name}: {_api_error(exc)}" for view_name, exc in failures]
     result["page"] = page_number
     return result
+
+
+BOM_PROMPT = """你是机械装配图明细表（BOM/明细栏）结构化提取助手。只读取本页图纸中的装配明细表，不要提取标题栏、技术要求、尺寸表或零件图的参数表。
+返回一个 JSON 对象，且只返回 JSON：
+{
+  "has_table": true 或 false,
+  "table_kind": "assembly_bom" | "part_table" | "title_block" | "other" | "none",
+  "title_block_code": "本页标题栏中的图纸代号，没有则空字符串",
+  "title_block_name": "本页标题栏中的图纸名称，没有则空字符串",
+  "rows": [
+    {
+      "seq": "明细表序号",
+      "code": "代号/图号",
+      "name": "名称",
+      "note": "备注原文",
+      "qty": "数量",
+      "raw_text": "该行原始文字"
+    }
+  ],
+  "issues": ["无法确定的问题，没有则空数组"]
+}
+规则：
+- 只输出装配明细表的行；表头重复出现时跳过表头，不要把表头当成行。
+- 明细表可能是正序或倒序；按字段含义对齐，不要假设固定行序或固定列号。
+- 当前图纸自身的图号只属于标题栏，绝不能作为明细表子项。
+- 保持同一行的代号、名称、备注对应关系；备注按原文保留。
+- 看不清的字段写空字符串，不要猜测、不要补全。不要根据文件名或常识编造内容。
+- 如果页面旋转或倒置，请按文字可读方向读取。
+- 先判断页面中是否存在明细栏/明细表的表格框线（通常在标题栏上方或附近）。只要看到表格框线，即使文字无法辨认，也要 has_table=true；此时 rows 可为空，并在 issues 中说明“表格存在但文字无法辨认”，不能把无法辨认误报为“没有明细表”。
+- 如果页面确实没有装配明细表（例如只有标题栏或零件图参数表），has_table 为 false、rows 为空数组。
+"""
+
+
+def extract_bom_page(image: Image.Image, page_number: int = 1, filename_hint: str = "", title_hint: str = "") -> dict:
+    """Read one drawing page and return a structured candidate BOM.
+
+    This is a focused second OCR pass over an existing page image.  It never
+    makes the exists/missing decision; that is done by deterministic rules.
+    """
+    hint = ""
+    if filename_hint:
+        hint += f"\n文件名提示（只用于定位图纸，不要据此编造表格内容）：{filename_hint}"
+    if title_hint:
+        hint += f"\n标题栏提示（仅作参考，读不到就留空）：{title_hint}"
+    completion = _client().chat.completions.create(
+        model=config.QWEN_VL_MODEL,
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": f"这是第 {page_number} 页。{hint}\n{BOM_PROMPT}"},
+                {"type": "image_url", "image_url": {"url": _image_url(image)}},
+            ],
+        }],
+        max_tokens=3000,
+        timeout=120,
+    )
+    content = (completion.choices[0].message.content or "").strip()
+    if not content:
+        raise RuntimeError("Qwen3-VL 明细表识别返回空结果")
+    try:
+        data = _parse_raw_json_object(content)
+    except Exception as exc:
+        raise RuntimeError("Qwen3-VL 明细表识别返回内容不是有效 JSON: " + content[:240].replace("\n", " ")) from exc
+    if not any(key in data for key in ("has_table", "rows", "table_kind")):
+        raise RuntimeError("Qwen3-VL 明细表识别没有返回约定的 JSON 字段: " + content[:240].replace("\n", " "))
+    return data

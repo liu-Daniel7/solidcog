@@ -1,3 +1,5 @@
+import uuid
+
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 
@@ -24,7 +26,8 @@ def upload(
         raise HTTPException(413, f"单次最多上传 {config.MAX_BATCH_UPLOADS} 个文件")
     if ocr_backend not in {"qwen", "mineru"}:
         raise HTTPException(400, "OCR 后端必须是 qwen 或 mineru")
-    uploaded = [service.save_upload(file, ocr_backend) for file in files]
+    batch_id = uuid.uuid4().hex
+    uploaded = [service.save_upload(file, ocr_backend, batch_id=batch_id) for file in files]
     if "application/json" in request.headers.get("accept", ""):
         return JSONResponse({"success": True, "files": uploaded})
     return RedirectResponse("/home", 303)

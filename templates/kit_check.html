@@ -1,0 +1,743 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#f5f4ef">
+    <title>SolidCog · 装配图齐套性检查</title>
+    <style>
+{% include 'styles/workbench.css' %}
+{% include 'styles/kit-check.css' %}
+    </style>
+</head>
+<body>
+{% macro icon(name) -%}
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+{% if name == 'file' %}<path d="M13 3H5v18h14V9l-6-6Zm0 0v6h6M8 13h8M8 17h5"/>
+{% elif name == 'check' %}<path d="m5 12 4.5 4.5L19 7"/>
+{% elif name == 'download' %}<path d="M12 3v12m-4-4 4 4 4-4M4 19h16"/>
+{% elif name == 'refresh' %}<path d="M20 11a8 8 0 1 0-2 6M20 4v7h-7"/>
+{% elif name == 'search' %}<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4.5 4.5"/>
+{% elif name == 'close' %}<path d="m6 6 12 12M6 18 18 6"/>
+{% elif name == 'arrow' %}<path d="M5 12h14m-5-5 5 5-5 5"/>
+{% elif name == 'library' %}<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>
+{% elif name == 'spark' %}<path d="m12 3 2.5 6.5L21 12l-6.5 2.5L12 21l-2.5-6.5L3 12l6.5-2.5L12 3Z"/>
+{% elif name == 'eye' %}<path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/>
+{% elif name == 'edit' %}<path d="M4 20h4l11-11-4-4L4 16v4ZM13.5 6.5l4 4"/>
+{% endif %}
+</svg>
+{%- endmacro %}
+    <a class="skip-link" href="#kit-workspace">跳转到齐套性检查</a>
+    <div class="app">
+        <header class="topbar">
+            <a class="brand" href="/home" aria-label="SolidCog 工作台首页">
+                <span class="brand-mark" aria-hidden="true"><svg viewBox="0 0 32 32" fill="none"><path d="m16 3 11.3 6.5v13L16 29 4.7 22.5v-13L16 3Z" stroke="currentColor" stroke-width="1.8"/><path d="m4.7 9.5 11.3 7 11.3-7M16 16.5V29M16 3v13.5" stroke="currentColor" stroke-width="1.8"/><path d="m10.3 6.3 11.4 7v12.5" stroke="currentColor" stroke-width="1.3"/></svg></span>
+                <span class="brand-title">SolidCog<span>工程图纸智能工作台</span></span>
+            </a>
+            <nav class="main-nav" aria-label="主导航">
+                <a class="nav-link" href="/home">{{ icon('library') }}图纸库</a>
+                <a class="nav-link active" href="/kit-check">{{ icon('check') }}齐套性检查</a>
+                <a class="nav-link" href="/home#assistant">{{ icon('spark') }}图纸问答</a>
+            </nav>
+            <div class="topbar-actions"><span class="connection-status"><span class="status-dot"></span>本机检查</span></div>
+        </header>
+
+        <main class="kit-main" id="kit-workspace">
+            <section class="kit-hero">
+                <div class="eyebrow"><span class="eyebrow-line"></span>ASSEMBLY KIT CHECK</div>
+                <h1>装配图明细表，<span>齐套性检查。</span></h1>
+                <p>读取本次导入集合中的装配明细表，逐条核对对应工程图是否随批导入。检查集合、模式与异常始终可见。</p>
+                <div class="kit-scope">{{ scope_note if scope_note else '本次仅核对当前导入集合中的 PDF / PNG / JPG / TIFF / BMP / WebP 工程图；SLDPRT、SLDASM 模型文件以及未导入的 SLDDRW/DWG/DXF 不参与匹配。' }}</div>
+            </section>
+
+            <div class="kit-layout">
+                <section class="panel kit-setup" aria-labelledby="setup-title">
+                    <div class="panel-header">
+                        <div class="panel-title"><span class="section-index">01 / SETUP</span><h2 id="setup-title">本次检查集合</h2></div>
+                        <span class="kit-count" id="selected-count">0 个文件</span>
+                    </div>
+                    <div class="kit-mode-row" role="radiogroup" aria-label="检查模式">
+                        <label class="mode-card">
+                            <input type="radio" name="kit-mode" value="all" checked>
+                            <span class="mode-card-body"><strong>检查全部装配图</strong><small>扫描集合内所有工程图，分别识别有效装配明细表并汇总。默认模式。</small></span>
+                        </label>
+                        <label class="mode-card">
+                            <input type="radio" name="kit-mode" value="manual">
+                            <span class="mode-card-body"><strong>手动指定总成图</strong><small>从集合中选择总成图，读取明细表后沿已匹配的子装配继续展开。</small></span>
+                        </label>
+                    </div>
+                    <div class="manual-row" id="manual-row" hidden>
+                        <label class="control-label" for="kit-root">总成图</label>
+                        <select class="field" id="kit-root">
+                            <option value="">请选择本次集合中的总成工程图</option>
+                        </select>
+                        <p class="control-note">只展开已匹配且识别到明细表的子装配；缺失的子装配不会虚构内部零件。</p>
+                    </div>
+                    <div class="set-toolbar">
+                        <label class="search-field kit-search">{{ icon('search') }}<input class="field" id="set-search" type="search" placeholder="按图纸名称或文件名筛选集合…" aria-label="筛选检查集合"></label>
+                        <button class="button button-secondary" id="select-all" type="button">全选</button>
+                        <button class="button button-quiet" id="clear-all" type="button">清空</button>
+                    </div>
+                    <div class="drawing-checklist" id="drawing-checklist" aria-label="选择本次检查的文件"></div>
+                    <div class="kit-setup-footer">
+                        <span id="set-summary">请选择至少一个文件</span>
+                        <button class="button button-primary" id="start-check" type="button">{{ icon('check') }}开始检查</button>
+                    </div>
+                </section>
+
+                <aside class="kit-aside">
+                    <section class="panel kit-side-card">
+                        <div class="panel-header"><div class="panel-title"><span class="section-index">RECENT</span><h2>最近检查</h2></div></div>
+                        <div class="recent-list" id="recent-list">
+                            {% if recent_checks %}
+                            {% for check in recent_checks %}
+                            <a class="recent-item" href="/kit-check?check={{ check.id }}" data-check-id="{{ check.id }}">
+                                <span class="recent-mode">{{ check.mode_label }}</span>
+                                <strong>#{{ check.id }} · {{ check.status_label }}</strong>
+                                <small>{{ check.created_at }}</small>
+                            </a>
+                            {% endfor %}
+                            {% else %}
+                            <p class="control-note">还没有检查记录。选择文件后开始第一次检查。</p>
+                            {% endif %}
+                        </div>
+                    </section>
+                    <section class="panel kit-side-card kit-rules-card">
+                        <div class="panel-header"><div class="panel-title"><span class="section-index">RULES</span><h2>判定口径</h2></div></div>
+                        <ul class="rule-list">
+                            <li><strong>备注免查</strong><span>仅明确为“标准件 / 外购件 / 无图”的条目免于查图；“非标准件”等不豁免。</span></li>
+                            <li><strong>文件名匹配</strong><span>只接受代号、代号-名称、代号_名称、代号 名称四种完整形式，不做模糊包含。</span></li>
+                            <li><strong>提取异常</strong><span>识别失败、缺代号、未处理页面与内容冲突会单独提示，不伪装成空表或“不存在”。</span></li>
+                            <li><strong>模型边界</strong><span>视觉模型只负责读取表格；存在性与豁免由确定性规则判定。</span></li>
+                        </ul>
+                    </section>
+                </aside>
+            </div>
+
+            <section class="panel kit-progress" id="kit-progress" hidden aria-live="polite">
+                <div class="progress-head"><div><span class="section-index">02 / RUNNING</span><h2 id="progress-title">正在检查</h2></div><span class="progress-percent" id="progress-percent">0%</span></div>
+                <div class="progress-track"><span id="progress-bar"></span></div>
+                <div class="progress-meta"><span id="progress-step">准备中…</span><span id="progress-mode"></span></div>
+            </section>
+
+            <section class="panel kit-results" id="kit-results" hidden aria-labelledby="results-title">
+                <div class="panel-header kit-results-head">
+                    <div class="panel-title"><span class="section-index">03 / RESULT</span><h2 id="results-title">检查结果</h2></div>
+                    <div class="result-actions">
+                        <button class="button button-secondary" id="retry-check" type="button">{{ icon('refresh') }}重试识别</button>
+                        <button class="button button-primary" id="export-csv" type="button">{{ icon('download') }}导出 CSV</button>
+                    </div>
+                </div>
+                <div class="result-context" id="result-context"></div>
+                <div class="summary-grid" id="summary-grid"></div>
+                <div class="verdict" id="verdict" role="status"></div>
+                <div class="result-toolbar">
+                    <label class="filter-check"><input type="checkbox" id="only-missing">只看不存在</label>
+                    <label class="filter-check"><input type="checkbox" id="only-review">只看待复核</label>
+                    <span class="result-toolbar-note" id="visible-note"></span>
+                </div>
+                <div id="group-list" class="group-list"></div>
+                <div id="drawing-issues-wrap" class="drawing-issues-wrap" hidden>
+                    <h3>其他图纸与提取情况</h3>
+                    <div id="drawing-issues" class="drawing-issues"></div>
+                </div>
+                <div class="empty-state kit-empty" id="kit-empty" hidden>
+                    <div class="empty-illustration" aria-hidden="true">{{ icon('file') }}</div>
+                    <strong>未识别到有效装配明细表</strong>
+                    <p>检查本身可能已完成，但没有可用于齐套性核对的明细表。请查看「其他图纸与提取情况」中的原因，或重试识别。</p>
+                </div>
+            </section>
+        </main>
+        <footer class="workspace-footer"><span>SolidCog<span class="footer-divider">/</span><a href="/about">关于 SolidCog</a></span><a href="https://github.com/opendatalab/MinerU" target="_blank" rel="noopener noreferrer">Powered by MinerU</a></footer>
+    </div>
+
+    <div class="modal kit-modal" id="item-modal" role="dialog" aria-modal="true" aria-labelledby="item-modal-title" hidden>
+        <div class="modal-card">
+            <div class="modal-header"><div><span class="section-index">CORRECT EXTRACTION</span><h3 id="item-modal-title">修正明细表字段</h3></div><button class="icon-button" id="close-item-modal" type="button" aria-label="关闭">{{ icon('close') }}</button></div>
+            <p class="modal-description">修正后会立即用确定性规则重新匹配，不重新调用模型。</p>
+            <form id="item-form" class="item-form">
+                <label>代号<input class="field" id="item-code" required></label>
+                <label>名称<input class="field" id="item-name"></label>
+                <label>备注<input class="field" id="item-note" placeholder="如：标准件、外购件、无图"></label>
+                <label>数量<input class="field" id="item-quantity"></label>
+                <div class="item-form-actions"><button class="button button-secondary" id="cancel-item-modal" type="button">取消</button><button class="button button-primary" type="submit">保存并重新匹配</button></div>
+            </form>
+        </div>
+    </div>
+    <div class="kit-lightbox" id="kit-lightbox" hidden role="dialog" aria-modal="true" aria-label="图纸预览">
+        <button class="icon-button kit-lightbox-close" id="close-lightbox" type="button" aria-label="关闭预览">{{ icon('close') }}</button>
+        <img id="kit-lightbox-image" alt="图纸预览">
+    </div>
+    <div id="kit-notification" class="notification" role="alert" hidden></div>
+
+    <script>
+        const kitDrawings = {{ drawings | tojson }};
+        const defaultBatchId = {{ (default_batch_id if default_batch_id is defined else "") | tojson }};
+        const recentCheckId = new URLSearchParams(window.location.search).get('check');
+        let selectedIds = new Set(kitDrawings.filter(function (drawing) {
+            return !defaultBatchId || drawing.batch_id === defaultBatchId;
+        }).map(function (drawing) { return Number(drawing.id); }));
+        let activeCheckId = null;
+        let currentPayload = null;
+        let pollTimer = null;
+        let editingItemId = null;
+        let notificationTimer = null;
+
+        const el = function (id) { return document.getElementById(id); };
+        const modeInputs = document.querySelectorAll('input[name="kit-mode"]');
+
+        function escapeHtml(value) {
+            return String(value == null ? '' : value).replace(/[&<>"']/g, function (char) {
+                return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char];
+            });
+        }
+
+        function notify(message) {
+            const node = el('kit-notification');
+            node.textContent = message;
+            node.hidden = false;
+            clearTimeout(notificationTimer);
+            notificationTimer = setTimeout(function () { node.hidden = true; }, 5200);
+        }
+
+        async function api(url, options) {
+            const response = await fetch(url, Object.assign({ headers: { 'Accept': 'application/json' } }, options || {}));
+            const data = await response.json().catch(function () { return {}; });
+            if (!response.ok) {
+                const detail = data.detail || data.error || ('HTTP ' + response.status);
+                throw new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+            }
+            return data;
+        }
+
+        function currentMode() {
+            const checked = document.querySelector('input[name="kit-mode"]:checked');
+            return checked ? checked.value : 'all';
+        }
+
+        function updateMode() {
+            const manual = currentMode() === 'manual';
+            el('manual-row').hidden = !manual;
+            if (manual) refreshRootOptions();
+        }
+
+        function refreshRootOptions() {
+            const select = el('kit-root');
+            const previous = select.value;
+            select.innerHTML = '<option value="">请选择本次集合中的总成工程图</option>';
+            kitDrawings.filter(function (drawing) { return selectedIds.has(Number(drawing.id)); }).forEach(function (drawing) {
+                const option = document.createElement('option');
+                option.value = drawing.id;
+                option.textContent = drawing.title || drawing.original_filename;
+                select.appendChild(option);
+            });
+            if (previous && Array.from(select.options).some(function (option) { return option.value === previous; })) select.value = previous;
+        }
+
+        function fileTypeLabel(type) {
+            return String(type || '').replace('.', '').toUpperCase() || 'FILE';
+        }
+
+        function renderChecklist() {
+            const wrap = el('drawing-checklist');
+            const keyword = el('set-search').value.trim().toLowerCase();
+            wrap.innerHTML = '';
+            const visible = kitDrawings.filter(function (drawing) {
+                if (!keyword) return true;
+                return [drawing.original_filename, drawing.title, drawing.filename].some(function (value) {
+                    return String(value || '').toLowerCase().includes(keyword);
+                });
+            });
+            if (!visible.length) {
+                const empty = document.createElement('p');
+                empty.className = 'control-note checklist-empty';
+                empty.textContent = '没有匹配的图纸。';
+                wrap.appendChild(empty);
+            }
+            visible.forEach(function (drawing) {
+                const row = document.createElement('label');
+                row.className = 'drawing-check-row';
+                const checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.value = drawing.id;
+                checkbox.checked = selectedIds.has(Number(drawing.id));
+                checkbox.addEventListener('change', function () {
+                    if (checkbox.checked) selectedIds.add(Number(drawing.id));
+                    else selectedIds.delete(Number(drawing.id));
+                    updateSelection();
+                });
+                const copy = document.createElement('span');
+                copy.className = 'drawing-check-copy';
+                const name = document.createElement('strong');
+                name.textContent = drawing.original_filename;
+                const meta = document.createElement('small');
+                const pages = drawing.page_count ? ('第 ' + drawing.pages_processed + '/' + drawing.page_count + ' 页已识别') : '页数未知';
+                const batchLabel = defaultBatchId && drawing.batch_id === defaultBatchId ? ' · 最近导入批次' : '';
+                meta.textContent = (drawing.title || '未识别图名') + ' · ' + fileTypeLabel(drawing.file_type) + ' · ' + pages + batchLabel + (drawing.has_ocr ? '' : ' · OCR 未完成');
+                copy.appendChild(name);
+                copy.appendChild(meta);
+                const actions = document.createElement('span');
+                actions.className = 'drawing-check-actions';
+                if (drawing.id) {
+                    const preview = document.createElement('button');
+                    preview.type = 'button';
+                    preview.className = 'icon-button';
+                    preview.title = '预览图纸';
+                    preview.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M2.5 12S6 6.5 12 6.5 21.5 12 21.5 12 18 17.5 12 17.5 2.5 12 2.5 12Z"/><circle cx="12" cy="12" r="2.8"/></svg>';
+                    preview.addEventListener('click', function (event) { event.preventDefault(); openPreview('/drawings/' + drawing.id + '/preview', drawing.title || drawing.original_filename); });
+                    actions.appendChild(preview);
+                }
+                const badge = document.createElement('span');
+                badge.className = 'kit-mini-badge ' + (drawing.has_ocr ? 'ok' : 'warn');
+                badge.textContent = drawing.has_ocr ? '已OCR' : '待OCR';
+                actions.appendChild(badge);
+                row.appendChild(checkbox);
+                row.appendChild(copy);
+                row.appendChild(actions);
+                wrap.appendChild(row);
+            });
+            updateSelection();
+        }
+
+        function updateSelection() {
+            el('selected-count').textContent = selectedIds.size + ' 个文件';
+            el('set-summary').textContent = selectedIds.size ? ('本次将检查 ' + selectedIds.size + ' 个文件') : '请选择至少一个文件';
+            el('start-check').disabled = selectedIds.size === 0;
+            refreshRootOptions();
+        }
+
+        function renderSummary(payload) {
+            const summary = payload.summary || {};
+            const cards = [
+                ['已处理装配图', summary.assemblies || 0, 'assemblies'],
+                ['存在', summary.exists || 0, 'exists'],
+                ['不存在', summary.missing || 0, 'missing'],
+                ['免查', summary.exempt || 0, 'exempt'],
+                ['提取失败/待复核', summary.review_total || 0, 'review'],
+                ['检查完成', summary.complete ? '是' : '否', 'complete']
+            ];
+            el('summary-grid').innerHTML = cards.map(function (card) {
+                return '<div class="summary-card ' + card[2] + '"><span>' + escapeHtml(card[0]) + '</span><strong>' + escapeHtml(card[1]) + '</strong></div>';
+            }).join('');
+            const notes = [];
+            if (summary.candidates) notes.push('候选 ' + summary.candidates);
+            if (summary.unchecked) notes.push('未检查 ' + summary.unchecked);
+            if (summary.issue_drawings) notes.push('异常图纸 ' + summary.issue_drawings);
+            if (summary.no_table_drawings) notes.push('无明细表图纸 ' + summary.no_table_drawings);
+            if (summary.missing_selected_files) notes.push('检查集合缺失 ' + summary.missing_selected_files + ' 张');
+            const context = [];
+            context.push('<span class="context-chip">' + escapeHtml(payload.mode_label) + '</span>');
+            context.push('<span class="context-chip">检查集合 ' + escapeHtml(summary.selected_files) + ' 个文件</span>');
+            const effectiveStatus = (payload.status === 'queued' || payload.status === 'running')
+                ? payload.status_label
+                : (summary.complete ? payload.status_label : '检查未完成');
+            context.push('<span class="context-chip">状态：' + escapeHtml(effectiveStatus) + '</span>');
+            if (notes.length) context.push('<span class="context-chip muted">' + escapeHtml(notes.join(' · ')) + '</span>');
+            el('result-context').innerHTML = context.join('');
+            const verdict = el('verdict');
+            verdict.className = 'verdict';
+            if (payload.status === 'queued' || payload.status === 'running') {
+                verdict.classList.add('running');
+                verdict.textContent = '检查进行中：' + (payload.current_step || '正在处理');
+            } else if (summary.all_present) {
+                verdict.classList.add('good');
+                verdict.textContent = '整套齐全：本次集合中所有需检查条目均有匹配工程图（免查项不参与）。';
+            } else if (!summary.complete) {
+                verdict.classList.add('bad');
+                verdict.textContent = '检查未完成：存在识别失败、未处理页面或总成图问题，不能据此判断整套齐全。';
+            } else {
+                verdict.classList.add('warn');
+                const parts = ['检查完成，但存在需处理项'];
+                if (summary.missing) parts.push('缺失 ' + summary.missing + ' 项');
+                if (summary.review_items) parts.push('待复核 ' + summary.review_items + ' 项');
+                verdict.textContent = parts.join('：') + '。';
+            }
+        }
+
+        function statusClass(status) {
+            return { exists: 'exists', missing: 'missing', candidate: 'review', unchecked: 'unchecked', exempt: 'exempt' }[status] || 'unchecked';
+        }
+
+        function fileLinks(item) {
+            const fragments = [];
+            (item.matches || []).forEach(function (match) {
+                fragments.push('<span class="file-chip-wrap"><a class="file-chip" href="' + escapeHtml(match.file_url || match.preview_url || '#') + '" target="_blank" rel="noopener">' + escapeHtml(match.original_filename) + '</a><button type="button" class="preview-link" data-preview-url="' + escapeHtml(match.preview_url) + '" data-preview-alt="' + escapeHtml(match.original_filename) + '">预览</button></span>');
+            });
+            (item.candidates || []).forEach(function (match) {
+                fragments.push('<span class="file-chip candidate" title="' + escapeHtml(match.reason) + '">候选：' + escapeHtml(match.original_filename) + '</span>');
+            });
+            return fragments.length ? fragments.join('') : '<span class="muted-text">—</span>';
+        }
+
+        function renderItemRow(item) {
+            const tr = document.createElement('tr');
+            tr.dataset.status = item.match_status;
+            tr.dataset.review = item.review ? '1' : '0';
+            const seq = document.createElement('td');
+            seq.textContent = item.sequence_no || '—';
+            const code = document.createElement('td');
+            code.innerHTML = '<strong class="mono">' + escapeHtml(item.code || '（缺代号）') + '</strong>' + (item.page_number ? '<small class="row-page">第 ' + escapeHtml(item.page_number) + ' 页</small>' : '');
+            const name = document.createElement('td');
+            name.textContent = item.name || '—';
+            const note = document.createElement('td');
+            note.textContent = item.note || '—';
+            const qty = document.createElement('td');
+            qty.textContent = item.quantity || '—';
+            const files = document.createElement('td');
+            files.className = 'file-cell';
+            files.innerHTML = fileLinks(item);
+            const result = document.createElement('td');
+            const badges = [];
+            badges.push('<span class="status-badge ' + statusClass(item.match_status) + '">' + escapeHtml(item.status_label) + '</span>');
+            if (item.review) badges.push('<span class="status-badge review">待复核</span>');
+            if (item.edited) badges.push('<span class="status-badge edited">已修正</span>');
+            result.innerHTML = badges.join(' ');
+            if (item.extraction_issue) {
+                const issue = document.createElement('small');
+                issue.className = 'item-issue';
+                issue.textContent = item.extraction_issue;
+                result.appendChild(issue);
+            }
+            const action = document.createElement('td');
+            action.className = 'row-actions';
+            const edit = document.createElement('button');
+            edit.type = 'button';
+            edit.className = 'text-link';
+            edit.textContent = '修正';
+            edit.addEventListener('click', function () { openItemEditor(item); });
+            action.appendChild(edit);
+            tr.appendChild(seq); tr.appendChild(code); tr.appendChild(name); tr.appendChild(note); tr.appendChild(qty); tr.appendChild(files); tr.appendChild(result); tr.appendChild(action);
+            return tr;
+        }
+
+        function renderGroup(group) {
+            const card = document.createElement('article');
+            card.className = 'group-card';
+            const head = document.createElement('div');
+            head.className = 'group-head';
+            const titleWrap = document.createElement('div');
+            titleWrap.className = 'group-title-wrap';
+            const title = document.createElement('h3');
+            title.textContent = group.title || group.original_filename;
+            const meta = document.createElement('p');
+            const pages = group.pages.total ? ('第 ' + group.pages.processed + '/' + group.pages.total + ' 页已识别') : '页数未知';
+            meta.textContent = (group.code ? group.code + ' · ' : '') + group.original_filename + ' · ' + pages;
+            titleWrap.appendChild(title);
+            titleWrap.appendChild(meta);
+            const links = document.createElement('div');
+            links.className = 'group-links';
+            const preview = document.createElement('button');
+            preview.type = 'button';
+            preview.className = 'text-link';
+            preview.textContent = '查看来源工程图';
+            preview.addEventListener('click', function () { openPreview(group.preview_url, group.title || group.original_filename); });
+            const download = document.createElement('a');
+            download.className = 'text-link';
+            download.href = group.file_url;
+            download.target = '_blank';
+            download.rel = 'noopener';
+            download.textContent = '打开原文件';
+            links.appendChild(preview);
+            links.appendChild(download);
+            const badges = document.createElement('div');
+            badges.className = 'group-badges';
+            const groupBadge = document.createElement('span');
+            groupBadge.className = 'status-badge ' + (group.status === 'processed' ? 'exists' : group.status === 'partial' ? 'review' : 'missing');
+            groupBadge.textContent = group.status_label;
+            badges.appendChild(groupBadge);
+            if (group.is_root) {
+                const root = document.createElement('span');
+                root.className = 'status-badge root';
+                root.textContent = '总成图';
+                badges.appendChild(root);
+            }
+            head.appendChild(titleWrap);
+            head.appendChild(links);
+            head.appendChild(badges);
+            card.appendChild(head);
+            if (group.references && group.references.length) {
+                const refs = document.createElement('div');
+                refs.className = 'reference-line';
+                refs.textContent = '引用来源：' + group.references.map(function (reference) {
+                    return (reference.source_drawing || '') + ' / ' + (reference.code || '') + ' ' + (reference.name || '');
+                }).join('；');
+                card.appendChild(refs);
+            }
+            if (group.issues && group.issues.length) {
+                const issues = document.createElement('ul');
+                issues.className = 'issue-list';
+                group.issues.forEach(function (issue) {
+                    const li = document.createElement('li');
+                    li.textContent = issue;
+                    issues.appendChild(li);
+                });
+                card.appendChild(issues);
+            }
+            const tableWrap = document.createElement('div');
+            tableWrap.className = 'group-table-wrap';
+            const table = document.createElement('table');
+            table.className = 'group-table';
+            table.innerHTML = '<thead><tr><th>序号</th><th>代号</th><th>名称</th><th>备注</th><th>数量</th><th>匹配文件</th><th>状态</th><th>操作</th></tr></thead>';
+            const tbody = document.createElement('tbody');
+            group.items.forEach(function (item) { tbody.appendChild(renderItemRow(item)); });
+            table.appendChild(tbody);
+            tableWrap.appendChild(table);
+            card.appendChild(tableWrap);
+            if (group.exempt_items && group.exempt_items.length) {
+                const details = document.createElement('details');
+                details.className = 'exempt-block';
+                const summary = document.createElement('summary');
+                summary.textContent = '免查项 ' + group.exempt_items.length + ' 条（点击查看原因）';
+                details.appendChild(summary);
+                const list = document.createElement('div');
+                list.className = 'exempt-list';
+                group.exempt_items.forEach(function (item) {
+                    const row = document.createElement('div');
+                    row.className = 'exempt-row';
+                    row.innerHTML = '<span class="mono">' + escapeHtml(item.code || '—') + '</span><span>' + escapeHtml(item.name || '—') + '</span><span>' + escapeHtml(item.note || '—') + '</span><span class="status-badge exempt">免查：' + escapeHtml(item.exempt_reason || '') + '</span>';
+                    list.appendChild(row);
+                });
+                details.appendChild(list);
+                card.appendChild(details);
+            }
+            const counts = document.createElement('div');
+            counts.className = 'group-counts';
+            counts.textContent = '存在 ' + group.counts.exists + ' · 不存在 ' + group.counts.missing + ' · 免查 ' + group.counts.exempt + ' · 待复核 ' + group.counts.review;
+            card.appendChild(counts);
+            return card;
+        }
+
+        function renderGroups(payload) {
+            const onlyMissing = el('only-missing').checked;
+            const onlyReview = el('only-review').checked;
+            const list = el('group-list');
+            list.innerHTML = '';
+            let visibleItems = 0;
+            (payload.groups || []).forEach(function (group) {
+                const filtered = Object.assign({}, group, {
+                    items: (group.items || []).filter(function (item) {
+                        if (onlyMissing && item.match_status !== 'missing') return false;
+                        if (onlyReview && !item.review) return false;
+                        return true;
+                    })
+                });
+                if (!filtered.items.length && (onlyMissing || onlyReview)) return;
+                visibleItems += filtered.items.length;
+                list.appendChild(renderGroup(filtered));
+            });
+            el('visible-note').textContent = (onlyMissing || onlyReview) ? ('当前显示 ' + visibleItems + ' 条') : '';
+            const empty = el('kit-empty');
+            const final = payload.status !== 'queued' && payload.status !== 'running';
+            empty.hidden = !final || Boolean(payload.groups && payload.groups.length);
+            renderDrawingIssues(payload);
+        }
+
+        function renderDrawingIssues(payload) {
+            const issues = payload.drawing_issues || [];
+            const wrap = el('drawing-issues-wrap');
+            const list = el('drawing-issues');
+            list.innerHTML = '';
+            if (!issues.length) { wrap.hidden = true; return; }
+            wrap.hidden = false;
+            issues.forEach(function (issue) {
+                const card = document.createElement('div');
+                card.className = 'drawing-issue-card';
+                const title = document.createElement('strong');
+                title.textContent = (issue.title || issue.original_filename || ('图纸 #' + issue.drawing_id)) + (issue.is_root ? ' · 总成图' : '');
+                const meta = document.createElement('span');
+                meta.className = 'drawing-issue-meta';
+                meta.textContent = (issue.original_filename || '') + ' · ' + issue.status_label + ' · 第 ' + issue.pages_processed + '/' + issue.pages_total + ' 页';
+                const reasons = document.createElement('ul');
+                reasons.className = 'issue-list';
+                (issue.issues || []).forEach(function (reason) { const li = document.createElement('li'); li.textContent = reason; reasons.appendChild(li); });
+                card.appendChild(title); card.appendChild(meta); card.appendChild(reasons);
+                list.appendChild(card);
+            });
+        }
+
+        function renderPayload(payload) {
+            currentPayload = payload;
+            activeCheckId = payload.id;
+            try {
+                const url = new URL(window.location.href);
+                url.searchParams.set('check', payload.id);
+                history.replaceState(null, '', url);
+            } catch (error) { /* Keep the current URL if the browser blocks history. */ }
+            renderSummary(payload);
+            renderGroups(payload);
+            el('kit-results').hidden = false;
+            el('retry-check').disabled = !payload.can_retry;
+        }
+
+        function renderProgress(payload) {
+            const total = Number(payload.total_drawings || 0);
+            const done = Number(payload.processed_drawings || 0);
+            const percent = total ? Math.min(100, Math.round(done / total * 100)) : 0;
+            el('progress-bar').style.width = percent + '%';
+            el('progress-percent').textContent = percent + '%';
+            el('progress-step').textContent = payload.current_step || payload.status_label;
+            el('progress-mode').textContent = payload.mode_label + ' · 已检查 ' + done + '/' + total;
+            el('progress-title').textContent = payload.status === 'queued' ? '等待检查' : (payload.status === 'running' ? '正在检查' : payload.status_label);
+        }
+
+        async function pollCheck(checkId) {
+            clearTimeout(pollTimer);
+            try {
+                const payload = await api('/kit-checks/' + encodeURIComponent(checkId));
+                renderProgress(payload);
+                if (payload.status === 'queued' || payload.status === 'running') {
+                    renderPayload(payload);
+                    pollTimer = setTimeout(function () { pollCheck(checkId); }, 1200);
+                } else {
+                    renderPayload(payload);
+                    el('progress-bar').style.width = '100%';
+                    el('progress-percent').textContent = '100%';
+                    el('progress-step').textContent = '检查结束：' + payload.status_label;
+                }
+            } catch (error) {
+                notify('读取检查进度失败：' + error.message);
+            }
+        }
+
+        async function startCheck() {
+            const ids = Array.from(selectedIds);
+            if (!ids.length) { notify('请选择本次检查集合。'); return; }
+            const mode = currentMode();
+            const roots = mode === 'manual' ? [Number(el('kit-root').value)] : [];
+            if (mode === 'manual' && !roots[0]) { notify('请选择一张总成图。'); return; }
+            el('start-check').disabled = true;
+            el('start-check').textContent = '正在创建检查…';
+            try {
+                const payload = await api('/kit-checks', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({ drawing_ids: ids, mode: mode, root_drawing_ids: roots })
+                });
+                activeCheckId = payload.id;
+                currentPayload = null;
+                el('kit-progress').hidden = false;
+                el('kit-results').hidden = false;
+                el('summary-grid').innerHTML = '';
+                el('group-list').innerHTML = '';
+                el('verdict').textContent = '检查已创建，等待后台开始。';
+                el('verdict').className = 'verdict running';
+                el('result-context').innerHTML = '<span class="context-chip">' + escapeHtml(payload.mode_label) + '</span><span class="context-chip">检查集合 ' + ids.length + ' 个文件</span>';
+                renderProgress(payload);
+                pollCheck(payload.id);
+            } catch (error) {
+                notify('创建检查失败：' + error.message);
+            } finally {
+                el('start-check').disabled = false;
+                el('start-check').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m5 12 4.5 4.5L19 7"/></svg>开始检查';
+            }
+        }
+
+        function openPreview(url, alt) {
+            if (!url) return;
+            el('kit-lightbox-image').src = url;
+            el('kit-lightbox-image').alt = alt || '图纸预览';
+            el('kit-lightbox').hidden = false;
+        }
+
+        function closePreview() {
+            el('kit-lightbox').hidden = true;
+            el('kit-lightbox-image').src = '';
+        }
+
+        function openItemEditor(item) {
+            editingItemId = item.id;
+            el('item-code').value = item.code || '';
+            el('item-name').value = item.name || '';
+            el('item-note').value = item.note || '';
+            el('item-quantity').value = item.quantity || '';
+            el('item-modal').hidden = false;
+            el('item-modal').style.display = 'flex';
+            el('item-code').focus();
+        }
+
+        function closeItemEditor() {
+            editingItemId = null;
+            el('item-modal').hidden = true;
+            el('item-modal').style.display = '';
+        }
+
+        async function saveItem(event) {
+            event.preventDefault();
+            if (!editingItemId || !activeCheckId) return;
+            try {
+                const payload = await api('/kit-checks/' + activeCheckId + '/items/' + editingItemId, {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' },
+                    body: JSON.stringify({
+                        code: el('item-code').value.trim(),
+                        name: el('item-name').value.trim(),
+                        note: el('item-note').value.trim(),
+                        quantity: el('item-quantity').value.trim()
+                    })
+                });
+                closeItemEditor();
+                renderPayload(payload);
+                notify('已按修正后的字段重新匹配。');
+            } catch (error) {
+                notify('保存失败：' + error.message);
+            }
+        }
+
+        async function retryCheck() {
+            if (!activeCheckId) return;
+            if (!confirm('将重新识别失败/部分页的图纸并重新计算检查结果；已做的人工修正会被覆盖。建议先导出 CSV。继续吗？')) return;
+            try {
+                const payload = await api('/kit-checks/' + activeCheckId + '/retry', { method: 'POST' });
+                el('kit-progress').hidden = false;
+                renderProgress(payload);
+                pollCheck(activeCheckId);
+            } catch (error) {
+                notify('重试失败：' + error.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function () {
+            renderChecklist();
+            updateMode();
+            modeInputs.forEach(function (input) { input.addEventListener('change', updateMode); });
+            el('set-search').addEventListener('input', renderChecklist);
+            el('select-all').addEventListener('click', function () {
+                selectedIds = new Set(kitDrawings.map(function (drawing) { return Number(drawing.id); }));
+                renderChecklist();
+            });
+            el('clear-all').addEventListener('click', function () {
+                selectedIds.clear();
+                renderChecklist();
+            });
+            el('start-check').addEventListener('click', startCheck);
+            el('export-csv').addEventListener('click', function () {
+                if (activeCheckId) window.open('/kit-checks/' + activeCheckId + '/export.csv', '_blank');
+            });
+            el('retry-check').addEventListener('click', retryCheck);
+            ['only-missing', 'only-review'].forEach(function (id) {
+                el(id).addEventListener('change', function () { if (currentPayload) renderGroups(currentPayload); });
+            });
+            el('close-item-modal').addEventListener('click', closeItemEditor);
+            el('cancel-item-modal').addEventListener('click', closeItemEditor);
+            el('item-form').addEventListener('submit', saveItem);
+            el('item-modal').addEventListener('click', function (event) { if (event.target === el('item-modal')) closeItemEditor(); });
+            el('close-lightbox').addEventListener('click', closePreview);
+            el('kit-lightbox').addEventListener('click', function (event) { if (event.target === el('kit-lightbox')) closePreview(); });
+            document.addEventListener('click', function (event) {
+                const trigger = event.target.closest('[data-preview-url]');
+                if (trigger) { event.preventDefault(); openPreview(trigger.dataset.previewUrl, trigger.dataset.previewAlt); }
+                if (event.target.closest('.recent-item')) { /* normal link */ }
+            });
+            document.addEventListener('keydown', function (event) {
+                if (event.key === 'Escape') { closeItemEditor(); closePreview(); }
+            });
+            if (recentCheckId && /^\d+$/.test(recentCheckId)) {
+                activeCheckId = Number(recentCheckId);
+                el('kit-progress').hidden = false;
+                el('kit-results').hidden = false;
+                pollCheck(activeCheckId);
+            }
+        });
+    </script>
+</body>
+</html>

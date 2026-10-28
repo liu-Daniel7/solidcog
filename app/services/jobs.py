@@ -9,6 +9,7 @@ from __future__ import annotations
 import shutil
 import tempfile
 import threading
+import uuid
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -49,7 +50,6 @@ _executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="solidcog-ocr")
 
 
 def _new_id() -> str:
-    import uuid
     return uuid.uuid4().hex
 
 
@@ -75,9 +75,10 @@ def create(files: list[UploadFile], backend: str) -> dict[str, Any]:
         raise
 
     job = Job(_new_id(), len(staged))
+    batch_id = uuid.uuid4().hex
     with _lock:
         _jobs[job.id] = job
-    _executor.submit(_run, job.id, staged, backend, staging)
+    _executor.submit(_run, job.id, staged, backend, staging, batch_id)
     return job.snapshot()
 
 
@@ -89,7 +90,7 @@ def get(job_id: str) -> dict[str, Any]:
         return job.snapshot()
 
 
-def _run(job_id: str, staged: list[tuple[Path, str]], backend: str, staging: Path) -> None:
+def _run(job_id: str, staged: list[tuple[Path, str]], backend: str, staging: Path, batch_id: str = "") -> None:
     with _lock:
         job = _jobs[job_id]
         job.status = "processing"
@@ -100,7 +101,7 @@ def _run(job_id: str, staged: list[tuple[Path, str]], backend: str, staging: Pat
             try:
                 with path.open("rb") as handle:
                     upload = UploadFile(file=handle, filename=original_name)
-                    result = save_upload(upload, backend)
+                    result = save_upload(upload, backend, batch_id=batch_id)
                 with _lock:
                     job.results.append(result)
             except Exception as exc:
