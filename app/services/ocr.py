@@ -1,7 +1,7 @@
 from pathlib import Path
 
 from app import config
-from app.services import mineru
+from app.services import coordinate_scan, mineru
 from app.services.images import load_pages, page_count
 from app.services.qwen import ocr_page
 
@@ -23,6 +23,16 @@ def run_ocr(file_path: str | Path, backend: str = "qwen") -> dict:
         return mineru.run(path)
     if backend != "qwen":
         return _error(f"不支持的 OCR 后端: {backend}")
+    # The cross-platform RapidOCR scan gives us page text and coordinates in
+    # one local pass.  macOS Vision is the fallback when RapidOCR is missing;
+    # the old multi-view Qwen path remains the final fallback.
+    scan = coordinate_scan.scan_file(
+        path,
+        pages_limit=config.QWEN_OCR_MAX_PAGES,
+        dpi=config.KIT_SCAN_DPI,
+    )
+    if scan.get("available") and scan.get("blocks"):
+        return coordinate_scan.ocr_result(scan)
     try:
         images = load_pages(path, dpi=400, limit=config.QWEN_OCR_MAX_PAGES)
         pages = []

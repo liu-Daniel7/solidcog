@@ -20,7 +20,7 @@ import pypdfium2 as pdfium
 from app import config
 from app.repositories import drawings as drawings_repository
 from app.repositories import kit_checks as cache_repository
-from app.services import qwen, segments
+from app.services import coordinate_scan, qwen, segments
 from app.services.images import load_pages, page_count
 from app.services.kit_rules import (
     DRAWING_SUFFIXES,
@@ -35,7 +35,7 @@ from app.services.kit_rules import (
 
 LOGGER = logging.getLogger(__name__)
 
-BOM_EXTRACTION_VERSION = "2026-10-28.1"
+BOM_EXTRACTION_VERSION = "2026-10-28.2"
 _HEADER_WORDS = {"序号", "代号", "名称", "备注", "数量", "图号", "零件号", "件号", "明细", "BOM"}
 _CODE_LABEL = re.compile(r"(?:图号|代号|图纸编号|零件号|件号)\s*[:：]?\s*([A-Za-z0-9][A-Za-z0-9._/-]{2,39})")
 _CODE_TOKEN = re.compile(r"(?<![A-Za-z0-9._/-])([A-Za-z0-9][A-Za-z0-9._/-]{2,39})(?![A-Za-z0-9._/-])")
@@ -463,6 +463,52 @@ def _model_rows(
     return rows, processed, issues, model_code, model_name, has_table
 
 
+
+def _merge_coordinate_notes(base_rows: list[dict], vision_rows: list[dict]) -> list[dict]:
+    """Keep local notes/quantities when the focused VLM omits a cell."""
+    by_code = {
+        normalize_code(row.get("code")): row
+        for row in base_rows
+        if normalize_code(row.get("code"))
+    }
+    by_name = {
+        clean_text(row.get("name")): row
+        for row in base_rows
+        if clean_text(row.get("name"))
+    }
+    merged = []
+    for row in vision_rows:
+        item = dict(row)
+        base = by_code.get(normalize_code(item.get("code"))) or by_name.get(clean_text(item.get("name")))
+        if base:
+            for field in ("sequence_no", "name", "note", "quantity"):
+                if not clean_text(item.get(field)):
+                    item[field] = base.get(field, "")
+        merged.append(item)
+    return merged
+
+
+def _coordinate_rows(drawing: dict) -> tuple[list[dict], int, list[str], str, str, bool] | None:
+    """Use the local coordinate scan before asking the focused VLM to re-read.
+
+    The scan is the cheap first pass.  If it reconstructs a BOM table with
+    rows, those rows become the candidate table; otherwise the caller falls
+    back to the existing focused vision pass.  A scan without a table never
+    becomes a ``no_table`` verdict by itself.
+    """
+    try:
+        scan = coordinate_scan.scan_drawing(drawing)
+    except Exception as exc:
+        LOGGER.warning("Coordinate scan failed for drawing %s: %s", drawing.get("id"), exc)
+        return None
+    if not scan.get("available") or not scan.get("blocks"):
+        return None
+    rows, processed, issues, title_code, title_name, has_table = coordinate_scan.rows_from_scan(scan)
+    if not rows:
+        return None
+    return rows, processed, issues, title_code, title_name, has_table
+
+
 def _status_for_table(
     *,
     rows: list[dict],
@@ -521,14 +567,37 @@ def _extract_uncached(drawing: dict) -> dict:
     model_name = ""
     has_table = False
     source = ""
-    if qwen_configured():
+    coordinate_used = False
+    qwen_verified = False
+    coordinate = _coordinate_rows(drawing)
+    if coordinate:
+        model_rows, model_processed, model_issues, model_code, model_name, has_table = coordinate
+        coordinate_used = True
+        source = "coordinate_scan"
+        # The local scan is fast but may miss a small quantity/note cell.  Only
+        # spend the focused VLM call when a coordinate row is visibly
+        # incomplete; a clean scan never pays for a second full-page read.
+        if qwen_configured() and any(row.get("issues") for row in model_rows):
+            qwen_rows, qwen_processed, qwen_issues, qwen_code, qwen_name, qwen_has_table = _model_rows(
+                drawing, path
+            )
+            if qwen_rows and len(qwen_rows) >= len(model_rows):
+                model_rows = _merge_coordinate_notes(model_rows, qwen_rows)
+                model_processed = qwen_processed
+                model_issues = [*model_issues, *qwen_issues]
+                model_code = qwen_code or model_code
+                model_name = qwen_name or model_name
+                has_table = qwen_has_table or has_table
+                qwen_verified = True
+    elif qwen_configured():
         model_rows, model_processed, model_issues, model_code, model_name, has_table = _model_rows(
             drawing, path
         )
         if model_rows:
             source = "vision"
 
-    vision_verdict_available = bool(qwen_configured() and model_processed > 0)
+    focus_configured = bool(qwen_configured() or coordinate_used)
+    vision_verdict_available = bool(focus_configured and model_processed > 0)
     if vision_verdict_available:
         # If the focused vision pass actually ran, trust its explicit
         # no-table/part-table verdict. Text-layer heuristics must not turn a
@@ -539,18 +608,20 @@ def _extract_uncached(drawing: dict) -> dict:
         rows = text_rows or ocr_rows
         issues = [*text_issues, *ocr_issues, *model_issues]
     from_model = bool(model_rows)
-    pages_processed = model_processed if qwen_configured() else max(text_processed, ocr_processed)
-    if not qwen_configured():
+    pages_processed = model_processed if focus_configured else max(text_processed, ocr_processed)
+    if not focus_configured:
         pages_processed = min(pages_limit, max(text_processed, ocr_processed))
     if model_processed and text_processed and model_processed != text_processed:
         pages_processed = max(model_processed, text_processed)
-    if not rows and not qwen_configured() and (text_rows or ocr_rows):
+    if not rows and not focus_configured and (text_rows or ocr_rows):
         pages_processed = max(text_processed, ocr_processed)
-    if vision_verdict_available:
+    if coordinate_used:
+        source = "coordinate_scan+qwen" if qwen_verified else "coordinate_scan"
+    elif vision_verdict_available:
         source = "vision" if model_rows else "vision_no_table"
     else:
         source = "pdf_text" if text_rows else "ocr_text" if ocr_rows else ""
-    if not qwen_configured() and not rows:
+    if not focus_configured and not rows:
         issues.append("未配置 Qwen 视觉模型，且 PDF 文字层/已有 OCR 未发现可用明细表")
     if rows and not from_model:
         issues.append("当前使用 PDF 文字层或已有 OCR 文本推断明细表，建议人工复核列对齐")
@@ -563,13 +634,13 @@ def _extract_uncached(drawing: dict) -> dict:
     if merged and not valid_rows:
         status = "failed"
         issues.append("明细表行存在，但没有可确认的代号，不能据此判定不存在")
-    elif not valid_rows and qwen_configured() and model_processed == 0:
+    elif not valid_rows and focus_configured and model_processed == 0:
         # The focused vision pass failed on every page. This is an extraction
         # failure, not an empty table and not a partial no-table result.
         status = "failed"
         if not model_issues and not issues:
             issues.append("明细表视觉识别失败，未获得任何可用页面")
-    elif not valid_rows and not qwen_configured():
+    elif not valid_rows and not focus_configured:
         # Without a focused vision pass, absence of parsed rows is not proof
         # that a table does not exist. Fail visibly instead of reporting an
         # empty/no-table result.

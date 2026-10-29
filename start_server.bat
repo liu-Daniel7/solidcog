@@ -15,7 +15,7 @@ if not exist ".env" (
     exit /b 1
 )
 
-".venv\Scripts\python.exe" -c "import fastapi, pypdfium2, uvicorn, requests, jinja2, openai; from PIL import Image" >nul 2>&1
+".venv\Scripts\python.exe" -c "import fastapi, pypdfium2, uvicorn, requests, jinja2, openai, rapidocr_onnxruntime; from PIL import Image" >nul 2>&1
 if %errorlevel% neq 0 (
     echo Dependencies are incomplete. Run: .venv\Scripts\python.exe -m pip install -r requirements.txt
     pause

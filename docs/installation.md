@@ -91,6 +91,7 @@ cd solidcog
 py -3.12 -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements.txt
+# requirements.txt includes rapidocr-onnxruntime；Windows 本地坐标 OCR 无需 WSL 或云端 Key
 
 # 首次使用时复制；保留已有 .env
 if (!(Test-Path .env)) { Copy-Item .env.example .env }

@@ -29,6 +29,22 @@ class OcrDispatchTests(unittest.TestCase):
         self.assertEqual(result["model"], "qwen3-vl-plus")
         self.assertEqual(result["pages_processed"], 1)
 
+    def test_qwen_uses_coordinate_scan_before_multi_view_fallback(self):
+        scan = {
+            "available": True,
+            "blocks": [{"text": "SK.CNC.0002"}],
+            "text": "第 1 页\nSK.CNC.0002",
+            "pages": [{"page": 1, "width": 100, "height": 80, "blocks": [], "regions": {"title": {"code": "SK.CNC.0002", "name": ""}}}],
+            "pages_processed": 1,
+            "pages_total": 1,
+        }
+        with patch.object(ocr.coordinate_scan, "scan_file", return_value=scan), \
+             patch.object(ocr, "ocr_page") as legacy:
+            result = ocr.run_ocr(self.image_path)
+        self.assertEqual(result["backend"], "qwen_scan")
+        self.assertIn("SK.CNC.0002", result["title_block"])
+        legacy.assert_not_called()
+
     def test_qwen_failure_does_not_create_empty_success(self):
         with patch.object(ocr, "ocr_page", side_effect=RuntimeError("API error")):
             result = ocr.run_ocr(self.image_path)
