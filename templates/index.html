@@ -1145,7 +1145,7 @@
             function syncBackend(value) {
                 uploadOcrBackend.value = value;
                 document.getElementById('backend-label').textContent = value === 'qwen' ? '云端文字识别' : '本地文字识别';
-                document.getElementById('backend-note').textContent = value === 'qwen' ? '图纸页面将发送至 Qwen 云端进行文字识别。' : '图纸在本地识别，无需发送到云端。';
+                document.getElementById('backend-note').textContent = value === 'qwen' ? '优先使用本机 Vision 坐标扫描；本机无法识别时回退到 Qwen 云端。' : '图纸在本地识别，无需发送到云端。';
                 try { sessionStorage.setItem('solidcog.ocr-backend', value); } catch (_) { /* Storage can be unavailable. */ }
             }
             let storedBackend;
