@@ -23,9 +23,9 @@ def run_ocr(file_path: str | Path, backend: str = "qwen") -> dict:
         return mineru.run(path)
     if backend != "qwen":
         return _error(f"不支持的 OCR 后端: {backend}")
-    # The macOS native scan gives us the page text and its coordinates in one
-    # local pass.  Use it as the Qwen backend's first stage; the old multi-view
-    # Qwen path remains the fallback on other platforms or when Vision fails.
+    # The cross-platform RapidOCR scan gives us page text and coordinates in
+    # one local pass.  macOS Vision is the fallback when RapidOCR is missing;
+    # the old multi-view Qwen path remains the final fallback.
     scan = coordinate_scan.scan_file(
         path,
         pages_limit=config.QWEN_OCR_MAX_PAGES,
