@@ -2,8 +2,9 @@
 
 The scanner is deliberately split from the final BOM model call:
 
-1. One local pass (Apple Vision on macOS) records every recognized text block
-   with a page-normalized bounding box.
+1. One local pass (RapidOCR on macOS/Windows, with macOS Vision as a
+   fallback) records every recognized text block with a page-normalized
+   bounding box.
 2. Header labels, title-block labels and rows are reconstructed from geometry.
 3. Only an uncertain or incomplete table is sent to the focused BOM model.
 
