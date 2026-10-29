@@ -19,7 +19,7 @@ from pathlib import Path
 
 from app import config
 from app.repositories import scans as scan_repository
-from app.services import macos_vision
+from app.services import macos_vision, rapidocr_scan
 from app.services.images import load_pages, page_count
 from app.services.kit_rules import clean_text, is_valid_code, normalize_code
 
@@ -28,7 +28,7 @@ OPTIONAL_COLUMNS = ("材料", "单重", "总重")
 HEADER_LABELS = set(HEADER_KEYS) | set(OPTIONAL_COLUMNS) | {"比例", "重量", "图号"}
 CODE_RE = re.compile(r"[A-Za-z][A-Za-z0-9._-]{2,}")
 NUMERIC_RE = re.compile(r"^-?\d+(?:\.\d+)?$")
-SCAN_VERSION = "vision-2"
+SCAN_VERSION = "vision-3"
 
 
 def _hash_file(path: Path) -> str:
@@ -39,10 +39,10 @@ def _hash_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _signature(path: Path, dpi: int, pages_limit: int) -> str:
+def _signature(path: Path, dpi: int, pages_limit: int, scanner_name: str) -> str:
     digest = hashlib.sha256()
     digest.update(_hash_file(path).encode("ascii"))
-    for value in (SCAN_VERSION, str(dpi), str(pages_limit)):
+    for value in (SCAN_VERSION, str(dpi), str(pages_limit), scanner_name):
         digest.update(b"\0")
         digest.update(value.encode("ascii"))
     return digest.hexdigest()
@@ -77,6 +77,12 @@ def _group_by_y(blocks: list[dict], tolerance: float = 0.014) -> list[list[dict]
     return groups
 
 
+def _normalize_ocr_code(code: str) -> str:
+    # OCR frequently reads the zero in a code as capital O.  Correct only the
+    # common letter-O-between-digits pattern; other ambiguities stay reviewable.
+    return re.sub(r"(?<=[A-Z])O(?=\d{2,})|(?<=\d)O(?=\d)", "0", code)
+
+
 def _code_from_text(text: str) -> str:
     compact = re.sub(r"\s+", "", text or "")
     for match in CODE_RE.finditer(compact):
@@ -84,7 +90,7 @@ def _code_from_text(text: str) -> str:
         # Title blocks frequently render "CODE-NAME" as one OCR block.  A
         # short alphabetic suffix is a name fragment, not part of the drawing
         # code (e.g. SK.CNC.0001-SK).
-        candidate = re.sub(r"-[A-Za-z]{1,4}$", "", candidate)
+        candidate = _normalize_ocr_code(re.sub(r"-[A-Za-z]{1,4}$", "", candidate))
         if is_valid_code(candidate):
             return candidate
     return ""
@@ -153,7 +159,7 @@ def _table_region(blocks: list[dict]) -> dict | None:
                 continue
             cells[key].append(clean_text(block["text"]))
         code = re.sub(r"\s+", "", " ".join(cells["代号"]))
-        code = normalize_code(code)
+        code = _normalize_ocr_code(normalize_code(code))
         name = " ".join(cells["名称"]).strip()
         note = " ".join(cells["备注"]).strip()
         # A single page-border letter or a weight value can land in the note
@@ -222,11 +228,12 @@ def _title_region(blocks: list[dict]) -> dict:
         "装配件", "阶段标记", "更改文件号 签名", "年月日", "处数", "分区", "标记",
         "设计", "校核", "工艺", "审核", "批准", "标准化", "替代", "共张第张版本",
         "主管设计", "比例", "重量", "签字", "日期", "材料", "单重", "总重",
+        "签名", "标记处数", "标记", "处数",
     }
     name_candidates = [
         block for block in blocks
         if block is not code_block
-        and _center(block)[0] > 0.5
+        and abs(_center(block)[0] - _center(code_block)[0]) < 0.2
         and abs(_center(block)[1] - _center(code_block)[1]) < 0.12
         and re.search(r"[\u4e00-\u9fff]", block["text"])
         and clean_text(block["text"]) not in excluded
@@ -234,7 +241,14 @@ def _title_region(blocks: list[dict]) -> dict:
     ]
     name = ""
     if name_candidates:
-        best = max(name_candidates, key=lambda item: float(item.get("confidence") or 0))
+        best = min(
+            name_candidates,
+            key=lambda item: (
+                abs(_center(item)[0] - _center(code_block)[0])
+                + abs(_center(item)[1] - _center(code_block)[1]),
+                -float(item.get("confidence") or 0),
+            ),
+        )
         if float(best.get("confidence") or 0) >= 0.8:
             name = clean_text(best["text"])
     return {"code": code, "name": name, "bbox": code_block["bbox"]}
@@ -276,8 +290,10 @@ def _page_text(blocks: list[dict], page_number: int) -> str:
 
 def scan_file(path: Path, pages_limit: int | None = None, dpi: int | None = None) -> dict:
     """Scan a file once and return pages, blocks and geometric regions."""
-    if not macos_vision.available():
+    scanner = rapidocr_scan if rapidocr_scan.available() else macos_vision
+    if not scanner.available():
         return {"available": False, "pages": [], "blocks": [], "text": "", "signature": ""}
+    scanner_name = "rapidocr" if scanner is rapidocr_scan else "macos_vision"
     pages_limit = pages_limit or config.QWEN_OCR_MAX_PAGES
     dpi = dpi or config.KIT_SCAN_DPI
     try:
@@ -288,7 +304,7 @@ def scan_file(path: Path, pages_limit: int | None = None, dpi: int | None = None
     all_blocks: list[dict] = []
     try:
         for page_number, image in enumerate(images, 1):
-            blocks = macos_vision.scan_image(image)
+            blocks = scanner.scan_image(image)
             for block in blocks:
                 block["page"] = page_number
             regions = _page_regions(blocks)
@@ -308,8 +324,8 @@ def scan_file(path: Path, pages_limit: int | None = None, dpi: int | None = None
         "pages": pages,
         "blocks": all_blocks,
         "text": "\n\n".join(_page_text(page["blocks"], page["page"]) for page in pages if page["blocks"]),
-        "signature": _signature(path, dpi, pages_limit),
-        "scanner": f"macos_vision/{SCAN_VERSION}",
+        "signature": _signature(path, dpi, pages_limit, scanner_name),
+        "scanner": f"{scanner_name}/{SCAN_VERSION}",
         "pages_total": page_count(path),
         "pages_processed": len(pages),
     }
@@ -317,9 +333,10 @@ def scan_file(path: Path, pages_limit: int | None = None, dpi: int | None = None
 
 def scan_drawing(drawing: dict, force: bool = False) -> dict:
     path = config.UPLOAD_DIR / str(drawing.get("filename") or "")
-    if not path.exists() or not macos_vision.available():
+    if not path.exists() or not (rapidocr_scan.available() or macos_vision.available()):
         return {"available": False, "pages": [], "blocks": [], "text": ""}
-    signature = _signature(path, config.KIT_SCAN_DPI, config.QWEN_OCR_MAX_PAGES)
+    scanner_name = "rapidocr" if rapidocr_scan.available() else "macos_vision"
+    signature = _signature(path, config.KIT_SCAN_DPI, config.QWEN_OCR_MAX_PAGES, scanner_name)
     if not force:
         cached = scan_repository.get(int(drawing["id"]), signature)
         if cached:
@@ -351,7 +368,7 @@ def ocr_result(scan: dict) -> dict:
         "all_text": scan.get("text") or "",
         "layout": "horizontal" if int(first.get("width") or 0) >= int(first.get("height") or 0) else "vertical",
         "backend": "qwen_scan",
-        "model": "macos_vision",
+        "model": scan.get("scanner") or "local_scan",
         "pages_processed": int(scan.get("pages_processed") or 0),
         "pages_total": int(scan.get("pages_total") or 0),
         "page_errors": [],
