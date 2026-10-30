@@ -4,7 +4,7 @@
 
 **机械工程图纸解析、检索与辅助审图工作台**
 
-本地 MinerU OCR · MechVL 图纸问答 · Qwen 云端识别与双语翻译
+本地坐标 OCR · MechVL 图纸问答 · Qwen 高精度识别与双语翻译
 
 [![License](https://img.shields.io/badge/license-Apache--2.0-238636)](LICENSE)
 [![macOS](https://img.shields.io/badge/macOS-Apple_Silicon-111827)](#安装与启动)
@@ -17,7 +17,7 @@
 
 ![SolidCog 工作台：标题栏名称、文件名与悬浮预览](docs/images/workbench-desktop-2026-10-27.png)
 
-SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译和图纸问答放进一个浏览器工作台。图纸与识别结果保存在本机，使用 MinerU 与 MechVL 时由本地模型处理；需要云端 OCR 或翻译时，可在“处理设置”中配置一个 Qwen Key。
+SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译和图纸问答放进一个浏览器工作台。RapidOCR 提供本地坐标扫描，MinerU 与 MechVL 也可在本机运行；需要更高精度的 Qwen 识别或翻译时，可在“处理设置”中配置一个 Qwen Key。
 
 图纸库会从标题栏提取 **图纸名称（图名）**。即使上传文件名是编码或哈希，也能先按零件名称识别，再通过实际文件名追溯原件；鼠标悬停在图纸名称或文件名上会显示跟随鼠标的图纸预览。
 
@@ -36,8 +36,11 @@ SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译�
 
 截图使用示例图纸。页面支持桌面、平板与手机布局。
 
-## 最近更新（2026-10-27）
+## 最近更新（2026-10-30）
 
+- 齐套性检查改为 **RapidOCR 坐标扫描 + 聚焦复核**：先记录文字与 bbox，再按坐标重建明细表，减少每页十余次 Qwen 调用；
+- 上传识别选项简化为 **本地** / **高精度**：本地使用 MinerU，高精度优先 RapidOCR 坐标扫描并在不确定区域回退 Qwen；
+- macOS 与 Windows 共用 RapidOCR/ONNX 本地扫描；macOS 保留 Vision 后备；
 - 图纸库新增 **图纸名称** 列，从标题栏 `图名` 提取，编码文件名不再影响识别；
 - 实际文件名独立保留，悬停图纸名称或文件名显示跟随鼠标的预览；
 - 图片显示缩略图，PDF 显示第一页，预览图本地缓存；
@@ -53,8 +56,8 @@ SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译�
 | 上传与归档 | 拖放或批量选择文件，后台 OCR 队列、进度查询、部分失败提示与重试 |
 | 图纸名称识别 | 从标题栏提取图名，编码文件名与图纸名称分开显示，支持无标签标题栏推断 |
 | 悬浮预览 | 指向图纸名称或文件名，跟随鼠标显示图片缩略图或 PDF 首页；触屏设备保留原文件链接 |
-| 本地文字识别 | MinerU 输出统一的标题栏、技术要求、全文与布局信息，保留原始结构化结果 |
-| 云端文字识别 | 可选 DashScope Qwen3-VL，整页概览、重叠分块与重点区域补读 |
+| 本地（MinerU） | MinerU 输出标题栏、技术要求、全文与布局信息，保留原始结构化结果 |
+| 高精度识别 | 优先 RapidOCR 坐标扫描并按几何重建明细表；不确定区域回退 DashScope Qwen3-VL 聚焦复核 |
 | Qwen 通道配置 | 处理设置中填写一个 Key，保存后掩码显示并即时生效；同一 Key 可验证 Qwen-VL 与 Qwen-MT |
 | 图纸检索 | 按文件名和 OCR 文本搜索材料、图号、技术要求等内容 |
 | 查看与导出 | 独立 OCR 结果页、文字导出、双语翻译对照、CSV 导出、图纸删除 |
@@ -72,10 +75,10 @@ SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译�
 | 路径 | 本地运行时 | 准备事项 | 安装文档 |
 | --- | --- | --- | --- |
 | macOS / Apple Silicon | llama.cpp / Metal | Python 3.12、llama-server、GGUF 模型及视觉投影文件 | [macOS 安装](docs/installation.md#macos--apple-silicon) |
-| Windows / WSL2 | PyTorch / CUDA | Python 3.12、WSL2 Ubuntu、NVIDIA GPU；MinerU 需兼容旧 `/file_parse` 接口 | [Windows 安装与说明](docs/installation.md#windows--wsl2) |
-| 仅使用云端 OCR | 主应用 + DashScope | Python 3.12、Qwen API Key；不需要本地模型 | [云端 OCR 最小安装](docs/installation.md#仅使用云端-ocr) |
+| Windows | RapidOCR / 可选 WSL2 CUDA | Python 3.12；本地坐标 OCR 直接运行，不要求 WSL；MinerU/MechVL 本地模型仍按 WSL2 说明配置 | [Windows 安装与说明](docs/installation.md#windows--wsl2) |
+| 仅使用高精度 Qwen OCR | 主应用 + DashScope | Python 3.12、Qwen API Key；不需要本地模型 | [高精度 Qwen 最小安装](docs/installation.md#仅使用云端-ocr) |
 
-**先选运行方式，再装依赖。** macOS 使用 `platforms/macos/requirements.txt`，Windows 主应用使用根目录 `requirements.txt`；DashScope Key 在启用 Qwen 云端识别或 Qwen-MT 通道时需要。
+**先选运行方式，再装依赖。** macOS 使用 `platforms/macos/requirements.txt`，Windows 主应用使用根目录 `requirements.txt`；RapidOCR 本地坐标 OCR 随主应用安装；DashScope Key 在高精度 Qwen 回退或 Qwen-MT 通道时需要。
 
 已安装环境的日常启动：
 
@@ -96,13 +99,14 @@ SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译�
 ### 当前运行边界
 
 - **macOS 本地链路：** 支持本地 OCR 与流式图纸问答；GGUF 权重不随仓库分发，安装脚本也不负责下载或转换。
-- **Windows / WSL2 本地链路：** MechVL 使用 Transformers/CUDA 推理，支持网页流式问答；WSL 服务通过 `/analyze/stream` 输出 SSE，模型调度器通过 `/mechvl/analyze/stream` 转发。MinerU 仍要求兼容 `/file_parse`、`--enable-vlm-preload` 和项目使用的旧响应结构，部署时需单独核对版本。
-- **云端 OCR：** 无本地模型也能识别、归档和检索；MechVL 问答仍需本地模型服务。
+- **Windows 主应用：** RapidOCR 本地坐标 OCR 可直接运行，不要求 WSL；本地 MinerU/MechVL 模型仍按 WSL2/CUDA 说明配置。
+- **Windows / WSL2 本地模型链路：** MechVL 使用 Transformers/CUDA 推理，支持网页流式问答；WSL 服务通过 `/analyze/stream` 输出 SSE，模型调度器通过 `/mechvl/analyze/stream` 转发。MinerU 仍要求兼容 `/file_parse`、`--enable-vlm-preload` 和项目使用的旧响应结构，部署时需单独核对版本。
+- **高精度 Qwen：** 无本地模型也能识别、归档和检索；RapidOCR 失败时才会把图纸页面发送到 DashScope。MechVL 问答仍需本地模型服务。
 - **部署范围：** 启动器默认绑定 `127.0.0.1`，面向单机使用。当前没有面向公网的账号与权限系统，客户部署需另行配置访问控制，并保留 MinerU 标识。
 
 ## 开始处理图纸
 
-1. 打开右上角“处理设置”，选择 **MinerU 本地识别**或 **Qwen 云端识别**；使用 Qwen 时在同一个面板填写 API Key，点击“确认”并验证两个模型。
+1. 打开右上角“处理设置”，选择 **本地** 或 **高精度**；本地模式使用 MinerU 文档解析，高精度模式优先使用 RapidOCR 坐标扫描，RapidOCR 不确定时再使用 Qwen；使用高精度时需在同一个面板填写并验证 API Key。
 2. 拖入文件，点击“开始识别”，等待队列处理；部分失败时可查看原因并重试。
 3. 在图纸库按图纸名称、文件名、图号、材料或技术要求检索；悬停图纸名称或文件名可快速查看预览。通过操作菜单查看和导出 OCR，打开“翻译对照”可按条生成英文对照表并导出 CSV。
 4. 本地问答环境就绪后，点击图纸行的“审图”，或在助手中选择图纸，再输入问题。
@@ -135,14 +139,15 @@ SolidCog 把图纸上传、结构化文字识别、全文检索、双语翻译�
 flowchart TD
     Browser["浏览器工作台"] --> App["SolidCog · FastAPI :8000"]
     App --> Data["SQLite + 本地图纸与 OCR 结果"]
-    App --> Cloud["可选：DashScope Qwen 云端 OCR"]
+    App --> Local["RapidOCR 本地坐标 OCR"]
+    App --> Cloud["可选：DashScope Qwen 高精度回退"]
     App --> MT["可选：Qwen-MT 双语翻译"]
     App --> Scheduler["本地模型调度器 :8090"]
     Scheduler --> MinerU["MinerU OCR :8200"]
     Scheduler --> MechVL["MechVL 问答 :8100"]
 ```
 
-`app/` 和 `templates/` 提供共享业务与界面，平台层负责模型进程和硬件后端。MinerU 与 Qwen 的不同输出被映射到统一 OCR 结构，供入库、检索、导出和问答上下文复用。
+`app/` 和 `templates/` 提供共享业务与界面，平台层负责模型进程和硬件后端。RapidOCR、MinerU 与 Qwen 的不同输出被映射到统一 OCR 结构，供入库、检索、导出和问答上下文复用。
 
 调度器按需加载目标模型，切换时先停止当前模型、释放资源再启动另一个；推理期间拒绝切换，完成后继续驻留。macOS 使用 Metal / GGUF，Windows 使用 WSL2 / CUDA，两端推理参数与接口支持范围并不完全相同。
 
@@ -150,10 +155,11 @@ flowchart TD
 
 | 组件 | 当前用途与配置 |
 | --- | --- |
-| MinerU2.5-Pro-2605-1.2B | 本地图纸解析；通用文档模型，机械符号仍需复核 |
+| RapidOCR / ONNX | 坐标扫描引擎；macOS/Windows 共用，输出文字、置信度与 bbox |
+| MinerU2.5-Pro-2605-1.2B | 可选本地文档解析；通用文档模型，机械符号仍需复核 |
 | macOS MinerU 运行库 | `mineru-vl-utils[llama-cpp]==2.0.5`、`mineru-llama-cpp==0.1.5` |
 | MechVL-4B-RL | 机械图纸问答；macOS 默认使用 Q5 GGUF，WSL 使用 NF4 4-bit |
-| Qwen3-VL-Plus | 可选云端 OCR；由 `QWEN_VL_MODEL` 配置 |
+| Qwen3-VL-Plus | 高精度聚焦复核；由 `QWEN_VL_MODEL` 配置，RapidOCR 不确定时才调用 |
 | Qwen-MT-Plus | 翻译模型通道；由 `QWEN_MT_MODEL` 配置，默认复用 Qwen-VL 的 Key 与接口 |
 
 模型名称、推理运行库和完整 MinerU 主程序是不同的版本维度。详见 [macOS 运行时说明](platforms/macos/README.md)。
@@ -175,10 +181,10 @@ Windows / WSL2 的真实联调记录（2026-10-27）使用 **RTX 4060 Laptop 8 G
 | MinerU 原始结构化输出 | `mineru_results/` |
 | API Key 与本地配置 | `.env`，不要提交到 Git；可在“处理设置”中填写，保存后仅显示掩码（POSIX 下文件权限 0600） |
 | 聊天记录 | 当前浏览器标签页的 `sessionStorage`，可手动清理 |
-| Qwen OCR 输入 | 选择 Qwen 时，图纸页面图像发送至 DashScope |
+| 高精度 OCR 输入 | 选择“高精度”且 RapidOCR 无法确认时，图纸页面/局部图像发送至 DashScope；本地 RapidOCR 不上传 |
 | Qwen-MT 输入 | 打开翻译并点击翻译时，仅发送已提取文字，不上传图纸图片 |
 
-MinerU OCR 和 MechVL 推理走本地服务；首次安装依赖或下载模型仍需要网络。选择云端模式前，请确认图纸允许传输至对应服务。备份或迁移时至少同时保存 `database.db` 与 `uploads/`；需要保留解析原始记录时一并备份 `mineru_results/`。
+RapidOCR 坐标扫描、MinerU OCR 和 MechVL 推理均可在本机运行；首次安装依赖或下载模型仍需要网络。选择“高精度”前，请确认图纸允许发送至 DashScope。备份或迁移时至少同时保存 `database.db` 与 `uploads/`；需要保留解析原始记录时一并备份 `mineru_results/`。
 
 ## 开发
 
@@ -214,7 +220,7 @@ solidcog/
 
 | 文档 | 内容 |
 | --- | --- |
-| [安装与排障](docs/installation.md) | macOS、Windows / WSL2、云端 OCR 与常见问题 |
+| [安装与排障](docs/installation.md) | macOS、Windows、本地坐标 OCR、高精度 Qwen 与常见问题 |
 | [macOS 运行时](platforms/macos/README.md) | 平台层、依赖版本、健康检查与日志 |
 | [装配图齐套性检查](docs/kit-check.md) | 规则、状态、API、缓存、浏览器与真实 Qwen 验证记录 |
 | [工程设计与历史验证](docs/engineering-reference.md) | OCR 契约、调度设计、历史性能、论文与 BibTeX |
@@ -234,4 +240,5 @@ SolidCog 自有代码采用 [Apache License 2.0](LICENSE)，第三方组件与�
 - **[MinerU2.5-Pro 权重](https://huggingface.co/opendatalab/MinerU2.5-Pro-2605-1.2B)**：Apache-2.0；模型权重不包含在本仓库中。
 - **[mineru-llama-cpp](https://github.com/opendatalab/mineru-llama-cpp)** 与 **[llama.cpp](https://github.com/ggml-org/llama.cpp)**：MIT；macOS 引擎锁定为包含许可证文件的 `0.1.5`。
 - **[MechVL-4B-RL](https://huggingface.co/XiaofengAlg/MechVL-4B-RL)**：Apache-2.0，由原作者发布。使用时请引用 *MechVQA: Benchmarking and Enhancing Multimodal LLMs on Comprehensive Mechanical Drawing Understanding*（2026），[论文与引用格式](docs/engineering-reference.md#论文引用)。
-- **DashScope / Qwen**：选择云端 OCR 时适用对应服务条款。
+- **RapidOCR / ONNX Runtime**：本地坐标 OCR；许可证与模型来源见 `docs/third-party-licenses` 相关记录。
+- **DashScope / Qwen**：选择“高精度”并触发 Qwen 回退时适用对应服务条款。
