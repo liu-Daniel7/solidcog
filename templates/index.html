@@ -52,9 +52,9 @@
                             <span class="control-label">图纸文字识别</span>
                             <div class="segmented" role="radiogroup" aria-label="上传 OCR 后端">
                                 <input type="radio" id="ocr-mineru" name="ocr-backend-control" value="mineru" checked>
-                                <label for="ocr-mineru">MinerU · 本地</label>
+                                <label for="ocr-mineru">本地</label>
                                 <input type="radio" id="ocr-qwen" name="ocr-backend-control" value="qwen">
-                                <label for="ocr-qwen">Qwen · 云端</label>
+                                <label for="ocr-qwen">高精度</label>
                             </div>
                             <p id="backend-note" class="setting-note">图纸在本地识别，无需发送到云端。</p>
                         </div>
@@ -121,7 +121,7 @@
                                 <input type="file" id="files" name="files" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,.bmp,.webp" multiple required aria-label="选择要上传的图纸">
                             </div>
                             <div class="upload-footer">
-                                <span class="backend-indicator"><span class="status-dot"></span><span id="backend-label">本地文字识别</span></span>
+                                <span class="backend-indicator"><span class="status-dot"></span><span id="backend-label">本地识别</span></span>
                                 <button id="upload-btn" class="button button-primary" type="submit" aria-label="上传图纸" disabled><span id="upload-button-label">开始识别</span>{{ icon('arrow') }}</button>
                             </div>
                             <div id="upload-progress" class="upload-progress" role="status" aria-live="polite" hidden></div>
@@ -1144,8 +1144,8 @@
 
             function syncBackend(value) {
                 uploadOcrBackend.value = value;
-                document.getElementById('backend-label').textContent = value === 'qwen' ? '云端文字识别' : '本地文字识别';
-                document.getElementById('backend-note').textContent = value === 'qwen' ? '优先使用本机 Vision 坐标扫描；本机无法识别时回退到 Qwen 云端。' : '图纸在本地识别，无需发送到云端。';
+                document.getElementById('backend-label').textContent = value === 'qwen' ? '高精度识别' : '本地识别';
+                document.getElementById('backend-note').textContent = value === 'qwen' ? '优先使用 RapidOCR 本机坐标扫描；无法识别时回退到 Qwen 云端。' : '图纸在本地识别，无需发送到云端。';
                 try { sessionStorage.setItem('solidcog.ocr-backend', value); } catch (_) { /* Storage can be unavailable. */ }
             }
             let storedBackend;
